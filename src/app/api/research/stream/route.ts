@@ -43,11 +43,31 @@ export async function GET(request: NextRequest) {
       // Decode base64 answers and parse JSON
       let parsedAnswers;
       try {
-        const decodedBase64 = atob(answers);
+        // First, ensure we have a valid base64 string
+        const cleanedAnswers = answers.replace(/\s/g, '').replace(/^["']|["']$/g, '');
+        
+        // Decode base64 and URI components
+        const decodedBase64 = atob(cleanedAnswers);
         const decodedUri = decodeURIComponent(decodedBase64);
+        
+        // Parse JSON
         parsedAnswers = JSON.parse(decodedUri);
+        
+        // Validate that we have an array of strings
+        if (!Array.isArray(parsedAnswers) || !parsedAnswers.every(answer => typeof answer === 'string')) {
+          throw new Error('Answers must be an array of strings');
+        }
+
+        console.log('Successfully decoded answers:', parsedAnswers);
       } catch (error) {
         console.error('Error parsing answers:', error);
+        if (error instanceof Error) {
+          if (error.message.includes('URI')) {
+            throw new Error('Invalid encoding format - Please try submitting the form again');
+          } else if (error.message.includes('JSON')) {
+            throw new Error('Invalid answer format - The answers could not be processed');
+          }
+        }
         throw new Error('Invalid answers format - Please check your input and try again');
       }
 
@@ -58,23 +78,34 @@ export async function GET(request: NextRequest) {
         logs: ['Creating table of contents and research structure...'],
       });
 
-      const researchPlan = await generateResearchPlan({
-        query,
-        answers: parsedAnswers,
-      });
+      let researchPlan;
+      try {
+        researchPlan = await generateResearchPlan({
+          query,
+          answers: parsedAnswers,
+        });
 
-      // Send the research plan to the client
-      await sendUpdate({
-        progress: 15,
-        step: 'Research plan generated',
-        logs: [
-          'Research plan created successfully',
-          `Title: ${researchPlan.tableOfContents.title}`,
-          'Sections:',
-          ...researchPlan.tableOfContents.sections.map(s => `- ${s.heading}`),
-        ],
-        researchPlan,
-      });
+        // Send the research plan to the client
+        await sendUpdate({
+          progress: 15,
+          step: 'Research plan generated',
+          logs: [
+            'Research plan created successfully',
+            `Title: ${researchPlan.tableOfContents.title}`,
+            `Estimated Depth: ${researchPlan.estimatedDepth}`,
+            `Estimated Breadth: ${researchPlan.estimatedBreadth}`,
+            'Sections:',
+            ...researchPlan.tableOfContents.sections.map(s => `- ${s.heading}`),
+          ],
+          researchPlan,
+        });
+      } catch (error) {
+        console.error('Error generating research plan:', error);
+        throw new Error(
+          'Failed to generate research plan - ' + 
+          (error instanceof Error ? error.message : 'Please try again with more specific research parameters')
+        );
+      }
 
       // Start the actual research based on the plan
       const { learnings, visitedUrls } = await deepResearch({

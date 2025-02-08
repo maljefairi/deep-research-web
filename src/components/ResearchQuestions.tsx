@@ -39,16 +39,24 @@ export default function ResearchQuestions({ questions, initialQuery, onBack }: R
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Encode the research parameters in the URL
-    const params = new URLSearchParams({
-      query: initialQuery.query,
-      breadth: initialQuery.breadth.toString(),
-      depth: initialQuery.depth.toString(),
-      answers: btoa(encodeURIComponent(JSON.stringify(answers))),
-    });
+    try {
+      // Encode the answers properly
+      const encodedAnswers = btoa(encodeURIComponent(JSON.stringify(answers)));
 
-    // Navigate to the progress page with the research parameters
-    router.push(`/progress?${params.toString()}`);
+      // Encode the research parameters in the URL
+      const params = new URLSearchParams({
+        query: initialQuery.query,
+        breadth: initialQuery.breadth.toString(),
+        depth: initialQuery.depth.toString(),
+        answers: encodedAnswers,
+      });
+
+      // Navigate to the progress page with the research parameters
+      router.push(`/progress?${params.toString()}`);
+    } catch (error) {
+      console.error('Error encoding answers:', error);
+      setIsSubmitting(false);
+    }
   };
 
   return (

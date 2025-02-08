@@ -285,8 +285,12 @@ ${answers.map((answer, i) => `${i + 1}. ${answer}`).join('\n')}
 Create a research plan that:
 1. Has a clear structure with main sections and subsections
 2. Includes specific research queries for each section
-3. Suggests optimal research depth and breadth
-4. Ensures comprehensive coverage of the topic`,
+3. Provides estimated optimal research depth (1-5) and breadth (3-10)
+4. Ensures comprehensive coverage of the topic
+
+Note: The depth should be between 1-5 (where 1 is surface level and 5 is very detailed),
+and breadth should be between 3-10 (where 3 is focused and 10 is comprehensive).
+These estimates should be based on the complexity and scope of the research topic.`,
     schema: z.object({
       tableOfContents: z.object({
         title: z.string(),
@@ -296,10 +300,15 @@ Create a research plan that:
           researchQueries: z.array(z.string()).describe('Specific search queries to research this section'),
         })),
       }),
-      estimatedDepth: z.number().min(1).max(5),
-      estimatedBreadth: z.number().min(3).max(10),
+      estimatedDepth: z.number().min(1).max(5).describe('Estimated optimal research depth (1-5)'),
+      estimatedBreadth: z.number().min(3).max(10).describe('Estimated optimal research breadth (3-10)'),
     }),
   });
+
+  // Validate the response
+  if (!res.object.estimatedDepth || !res.object.estimatedBreadth) {
+    throw new Error('Invalid research plan: missing depth or breadth estimates');
+  }
 
   return res.object;
 }
