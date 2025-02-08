@@ -328,9 +328,17 @@ export default function Home() {
         <div className="fixed bottom-6 right-6">
           <button
             onClick={() => {
+              const blob = new Blob([report], { type: 'text/markdown' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
               const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
               const filename = `research-${timestamp}.md`;
-              window.open(`/api/reports/${encodeURIComponent(filename)}`, '_blank');
+              a.href = url;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
             }}
             className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-lg hover:bg-indigo-700 transition-colors duration-150"
           >
