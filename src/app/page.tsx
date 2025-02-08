@@ -21,6 +21,7 @@ export default function Home() {
   const [visitedUrls, setVisitedUrls] = useState<string[]>([]);
   const [report, setReport] = useState('');
   const [reports, setReports] = useState<Report[]>([]);
+  const [error, setError] = useState<string | undefined>();
 
   useEffect(() => {
     fetchReports();
@@ -32,6 +33,9 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         setReports(data.reports);
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to fetch reports:', errorData);
       }
     } catch (error) {
       console.error('Failed to fetch reports:', error);
@@ -40,15 +44,24 @@ export default function Home() {
 
   const handleViewReport = async (selectedReport: Report) => {
     try {
+      setError(undefined);
+      setProgress(25);
+      setCurrentStep('Loading Report');
+      
       const response = await fetch(`/api/reports/${encodeURIComponent(selectedReport.filename)}`);
       if (response.ok) {
         const content = await response.text();
         setReport(content);
         setProgress(100);
         setCurrentStep('Viewing Previous Research');
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to load report');
       }
     } catch (error) {
       console.error('Failed to load report:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load report');
+      setProgress(0);
     }
   };
 
@@ -62,6 +75,8 @@ export default function Home() {
     setLearnings([]);
     setVisitedUrls([]);
     setReport('');
+    setError(undefined);
+    setCurrentStep('Starting Research');
 
     try {
       const response = await fetch('/api/research', {
@@ -72,11 +87,11 @@ export default function Home() {
         body: JSON.stringify(data),
       });
 
-      if (!response.ok) {
-        throw new Error('Research request failed');
-      }
-
       const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Research request failed');
+      }
 
       // Parse the output to update progress
       const outputLines = result.output.split('\n');
@@ -84,11 +99,15 @@ export default function Home() {
       let currentUrls: string[] = [];
 
       outputLines.forEach((line: string) => {
-        if (line.includes('Researching your topic')) {
+        if (line.includes('What would you like to research?')) {
+          setCurrentStep('Initializing Research');
+          setProgress(10);
+        } else if (line.includes('Researching your topic')) {
           setCurrentStep('Research in Progress');
           setProgress(25);
         } else if (line.includes('Created queries')) {
           setProgress(50);
+          setCurrentStep('Analyzing Sources');
         } else if (line.includes('Learnings:')) {
           setProgress(75);
           setCurrentStep('Processing Results');
@@ -111,7 +130,9 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Research failed:', error);
+      setError(error instanceof Error ? error.message : 'Research process failed');
       setCurrentStep('Error');
+      setProgress(0);
     } finally {
       setIsResearching(false);
     }
@@ -124,24 +145,25 @@ export default function Home() {
           Deep Research Assistant
         </h1>
 
-        {reports.length > 0 && !isResearching && progress === 0 && (
+        {reports.length > 0 && !isResearching && progress === 0 && !error && (
           <ExistingReports reports={reports} onViewReport={handleViewReport} />
         )}
 
-        {!isResearching && progress === 0 && (
+        {!isResearching && progress === 0 && !error && (
           <ResearchForm onSubmit={handleResearchSubmit} />
         )}
 
-        {(isResearching || progress > 0) && (
+        {(isResearching || progress > 0 || error) && (
           <ProgressDisplay
             currentStep={currentStep}
             progress={progress}
             learnings={learnings}
             visitedUrls={visitedUrls}
+            error={error}
           />
         )}
 
-        {report && <ResultsView markdown={report} />}
+        {report && !error && <ResultsView markdown={report} />}
       </div>
     </main>
   );

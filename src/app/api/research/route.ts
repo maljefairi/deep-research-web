@@ -44,34 +44,68 @@ export async function POST(request: Request) {
     const { query, breadth, depth } = await request.json();
     const deepResearchPath = path.join(process.cwd(), '..', 'deep-research');
 
+    // Verify deep-research directory exists
+    try {
+      await readdir(deepResearchPath);
+    } catch (error) {
+      console.error('Deep research directory not found:', error);
+      return NextResponse.json(
+        { error: 'Deep research backend not found' },
+        { status: 500 }
+      );
+    }
+
     return new Promise((resolve) => {
-      const childProcess = spawn('npm', ['start'], {
+      // Start the deep-research process
+      const childProcess = spawn('node', ['src/run.ts'], {
         cwd: deepResearchPath,
         env: {
           ...process.env,
           PIPE_MODE: 'true',
         },
+        shell: true
       });
 
-      // Write the inputs to the process
-      childProcess.stdin.write(`${query}\n`);
-      childProcess.stdin.write(`${breadth}\n`);
-      childProcess.stdin.write(`${depth}\n`);
+      let stdoutData = '';
+      let stderrData = '';
 
-      let output = '';
+      // Handle process output
       childProcess.stdout.on('data', (data) => {
-        output += data.toString();
+        const output = data.toString();
+        stdoutData += output;
+        console.log('Research output:', output);
       });
 
       childProcess.stderr.on('data', (data) => {
-        console.error(`Error: ${data}`);
+        const error = data.toString();
+        stderrData += error;
+        console.error('Research error:', error);
       });
 
+      // Write inputs when prompted
+      childProcess.stdout.on('data', (data) => {
+        const output = data.toString();
+        if (output.includes('What would you like to research?')) {
+          childProcess.stdin.write(query + '\n');
+        } else if (output.includes('Enter research breadth')) {
+          childProcess.stdin.write(breadth + '\n');
+        } else if (output.includes('Enter research depth')) {
+          childProcess.stdin.write(depth + '\n');
+        }
+      });
+
+      // Handle process completion
       childProcess.on('close', async (code) => {
+        console.log('Research process exited with code:', code);
+        
         if (code !== 0) {
+          console.error('Research failed with stderr:', stderrData);
           resolve(
             NextResponse.json(
-              { error: 'Research process failed' },
+              { 
+                error: 'Research process failed',
+                details: stderrData
+              },
               { status: 500 }
             )
           );
@@ -89,24 +123,46 @@ export async function POST(request: Request) {
           resolve(
             NextResponse.json({
               success: true,
-              output,
+              output: stdoutData,
               report,
               reports
             })
           );
         } catch (error) {
+          console.error('Failed to read research results:', error);
           resolve(
             NextResponse.json(
-              { error: 'Failed to read research results' },
+              { 
+                error: 'Failed to read research results',
+                details: error instanceof Error ? error.message : 'Unknown error'
+              },
               { status: 500 }
             )
           );
         }
       });
+
+      // Handle process errors
+      childProcess.on('error', (error) => {
+        console.error('Failed to start research process:', error);
+        resolve(
+          NextResponse.json(
+            { 
+              error: 'Failed to start research process',
+              details: error.message
+            },
+            { status: 500 }
+          )
+        );
+      });
     });
   } catch (error) {
+    console.error('Request processing error:', error);
     return NextResponse.json(
-      { error: 'Invalid request' },
+      { 
+        error: 'Invalid request',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 400 }
     );
   }
