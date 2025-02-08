@@ -40,36 +40,43 @@ export default function ResearchQuestions({ questions, initialQuery, onBack }: R
     setIsSubmitting(true);
 
     try {
-      // Ensure answers are valid strings and not empty
-      const validAnswers = answers.map(answer => answer.trim()).filter(Boolean);
+      // Validate that all questions have answers
+      if (answers.length !== questions.length) {
+        throw new Error('Missing answers for some questions');
+      }
+
+      // Clean up answers but keep all of them
+      const validAnswers = answers.map(answer => answer.trim());
       
-      if (validAnswers.length !== questions.length) {
+      // Check if any answer is empty
+      if (validAnswers.some(answer => answer === '')) {
         throw new Error('Please answer all questions');
       }
 
       // First stringify the answers array
       const answersJson = JSON.stringify(validAnswers);
+      console.log('Answers JSON:', answersJson);
       
-      // Then URI encode the JSON string
-      const uriEncoded = encodeURIComponent(answersJson);
-      
-      // Finally convert to base64
-      const base64Encoded = btoa(uriEncoded);
+      // Convert to base64 directly (no URI encoding needed here)
+      const base64Encoded = btoa(answersJson);
+      console.log('Base64 encoded:', base64Encoded);
 
-      // Encode the research parameters in the URL
-      const params = new URLSearchParams({
-        query: initialQuery.query,
-        breadth: initialQuery.breadth.toString(),
-        depth: initialQuery.depth.toString(),
-        answers: base64Encoded,
-      });
+      // Create URL parameters - no need to encode answers again as it's already base64
+      const params = new URLSearchParams();
+      params.set('query', initialQuery.query);
+      params.set('breadth', initialQuery.breadth.toString());
+      params.set('depth', initialQuery.depth.toString());
+      params.set('answers', base64Encoded);
+
+      // Log the final URL parameters
+      console.log('Final URL params:', params.toString());
 
       // Navigate to the progress page with the research parameters
       router.push(`/progress?${params.toString()}`);
     } catch (error) {
-      console.error('Error encoding answers:', error);
+      console.error('Error preparing research:', error);
       setIsSubmitting(false);
-      // You might want to show an error message to the user here
+      alert(error instanceof Error ? error.message : 'Error processing answers');
     }
   };
 

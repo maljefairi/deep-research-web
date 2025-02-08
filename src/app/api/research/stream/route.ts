@@ -47,33 +47,31 @@ export async function GET(request: NextRequest) {
           throw new Error('No answers provided');
         }
 
+        // Remove any URL encoding that might have been added by the browser
+        const decodedUrl = decodeURIComponent(answers);
+        console.log('URL decoded answers:', decodedUrl);
+
         // Remove any whitespace and quotes that might have been added
-        const cleanedAnswers = answers.replace(/\s/g, '').replace(/^["']|["']$/g, '');
+        const cleanedAnswers = decodedUrl.replace(/\s/g, '').replace(/^["']|["']$/g, '');
+        console.log('Cleaned answers:', cleanedAnswers);
         
-        // First decode from base64
+        // Decode from base64
         let decodedBase64;
         try {
           decodedBase64 = atob(cleanedAnswers);
+          console.log('Base64 decoded:', decodedBase64);
         } catch (e) {
           console.error('Base64 decode error:', e);
-          throw new Error('Invalid base64 encoding');
+          throw new Error('Could not decode answers from base64 format');
         }
         
-        // Then decode URI components
-        let decodedUri;
+        // Parse JSON
         try {
-          decodedUri = decodeURIComponent(decodedBase64);
-        } catch (e) {
-          console.error('URI decode error:', e);
-          throw new Error('Invalid URI encoding');
-        }
-        
-        // Finally parse JSON
-        try {
-          parsedAnswers = JSON.parse(decodedUri);
+          parsedAnswers = JSON.parse(decodedBase64);
+          console.log('Parsed answers:', parsedAnswers);
         } catch (e) {
           console.error('JSON parse error:', e);
-          throw new Error('Invalid JSON format');
+          throw new Error('Could not parse answers as JSON');
         }
 
         // Validate the answers array

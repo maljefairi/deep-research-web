@@ -28,10 +28,12 @@ type ResearchState = {
 
 // Increase delay between requests to avoid rate limits
 const ConcurrencyLimit = 1;
-const RequestDelay = 15000; // 15 seconds delay between requests to respect rate limits
+const InitialRequestDelay = 5000; // 5 seconds initial delay
+const MaxRequestDelay = 60000; // Maximum 60 seconds delay
+const BackoffFactor = 1.5; // Exponential backoff factor
 
 // Maximum retries for rate-limited requests
-const MaxRetries = 3;
+const MaxRetries = 2;
 
 // Maximum content length to avoid token limits
 const MaxContentLength = 8000;
@@ -41,22 +43,30 @@ const MAX_TOTAL_QUERIES = 15;
 const MAX_DEPTH_ITERATIONS = 3;
 const MAX_RETRIES = 3;
 
-// Helper function to delay between requests
+// Helper function to delay between requests with exponential backoff
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper function to handle rate-limited requests with retries
+// Helper function to handle rate-limited requests with exponential backoff
 async function retryWithDelay<T>(
   fn: () => Promise<T>,
   retries = MaxRetries,
-  delayMs = RequestDelay
+  delayMs = InitialRequestDelay
 ): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
     if (error?.statusCode === 429 && retries > 0) {
-      console.log(`Rate limited, retrying in ${delayMs}ms... (${retries} retries left)`);
-      await delay(delayMs);
-      return retryWithDelay(fn, retries - 1, delayMs * 1.5);
+      // Get retry delay from response headers if available
+      const retryAfter = error.response?.headers?.['retry-after'];
+      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : delayMs;
+      
+      console.log(`Rate limited, waiting ${waitTime/1000}s before retry... (${retries} retries left)`);
+      await delay(waitTime);
+      
+      // Calculate next delay with exponential backoff, but don't exceed max delay
+      const nextDelay = Math.min(delayMs * BackoffFactor, MaxRequestDelay);
+      
+      return retryWithDelay(fn, retries - 1, nextDelay);
     }
     throw error;
   }
@@ -313,7 +323,7 @@ These estimates should be based on the complexity and scope of the research topi
   return res.object;
 }
 
-// Modify the deepResearch function to use the research plan
+// Modify the deepResearch function to handle sections sequentially
 export async function deepResearch({
   query,
   answers,
@@ -336,73 +346,66 @@ export async function deepResearch({
   try {
     console.log('Starting deep research with plan:', { query, breadth, depth });
     
-    onProgress?.(10, 'Starting research based on plan...');
-    
     const totalSections = researchPlan.tableOfContents.sections.length;
-    let currentProgress = 10;
-    const progressPerSection = 80 / totalSections;
+    let currentProgress = 0;
+    
+    const results = [];
+    
+    // Process sections sequentially to avoid rate limits
+    for (const [sectionIndex, section] of researchPlan.tableOfContents.sections.entries()) {
+      onProgress?.(
+        currentProgress,
+        `Researching section: ${section.heading}`
+      );
 
-    const results = await Promise.all(
-      researchPlan.tableOfContents.sections.map(async (section, sectionIndex) => {
-        onProgress?.(
-          currentProgress,
-          `Researching section: ${section.heading}`
-        );
+      // Process queries for this section sequentially
+      for (const query of section.researchQueries) {
+        try {
+          // Add delay between queries
+          await delay(InitialRequestDelay);
+          
+          const result = await retryWithDelay(() => 
+            firecrawl.search(query, {
+              timeout: 30000,
+              limit: 3,
+              scrapeOptions: { formats: ['markdown'] },
+            })
+          );
 
-        const sectionResults = await Promise.all(
-          section.researchQueries.map(async (query) => {
-            try {
-              await delay(RequestDelay);
-              
-              const result = await retryWithDelay(() => 
-                firecrawl.search(query, {
-                  timeout: 15000,
-                  limit: 3,
-                  scrapeOptions: { formats: ['markdown'] },
-                })
-              );
+          const newUrls = compact(result.data.map(item => item.url));
+          const newLearnings = await processSerpResult({
+            query,
+            result,
+            numFollowUpQuestions: 1,
+          });
 
-              const newUrls = compact(result.data.map(item => item.url));
-              const newLearnings = await processSerpResult({
-                query,
-                result,
-                numFollowUpQuestions: 1,
-              });
+          results.push({
+            learnings: newLearnings.learnings,
+            visitedUrls: newUrls,
+          });
+        } catch (error) {
+          console.error(`Error processing query "${query}":`, error);
+          // Continue with next query even if this one fails
+        }
+      }
 
-              return {
-                learnings: newLearnings.learnings,
-                visitedUrls: newUrls,
-              };
-            } catch (error) {
-              console.error(`Error processing query "${query}":`, error);
-              return { learnings: [], visitedUrls: [] };
-            }
-          })
-        );
-
-        currentProgress += progressPerSection;
-        onProgress?.(
-          Math.min(currentProgress, 90),
-          `Completed section: ${section.heading}`
-        );
-
-        return sectionResults;
-      })
-    );
+      // Update progress after each section
+      currentProgress = ((sectionIndex + 1) / totalSections) * 100;
+      onProgress?.(
+        currentProgress,
+        `Completed section: ${section.heading}`
+      );
+    }
 
     // Combine all results
     const finalResults = {
       learnings: [
         ...learnings,
-        ...new Set(results.flatMap(sectionResults => 
-          sectionResults.flatMap(result => result.learnings)
-        )),
+        ...new Set(results.flatMap(result => result.learnings)),
       ],
       visitedUrls: [
         ...visitedUrls,
-        ...new Set(results.flatMap(sectionResults => 
-          sectionResults.flatMap(result => result.visitedUrls)
-        )),
+        ...new Set(results.flatMap(result => result.visitedUrls)),
       ],
     };
 
