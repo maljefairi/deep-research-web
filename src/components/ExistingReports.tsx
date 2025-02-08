@@ -1,15 +1,17 @@
 'use client';
 
+import React from 'react';
+
 interface Report {
-  filename: string;
+  id: string;
   title: string;
-  path: string;
   date: string;
+  summary: string;
 }
 
 interface ExistingReportsProps {
   reports: Report[];
-  onViewReport: (report: Report) => void;
+  onViewReport: (reportId: string) => void;
 }
 
 export default function ExistingReports({ reports, onViewReport }: ExistingReportsProps) {
@@ -18,89 +20,57 @@ export default function ExistingReports({ reports, onViewReport }: ExistingRepor
     new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
+  if (reports.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-600 dark:text-gray-400">No research reports available yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto mb-8">
-      <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              Previous Research Reports
-            </h2>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              {reports.length} {reports.length === 1 ? 'report' : 'reports'} available
-            </span>
-          </div>
-
-          {reports.length === 0 ? (
-            <div className="text-center py-8">
-              <svg
-                className="mx-auto h-12 w-12 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No reports</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Start your first research to generate a report.
+      <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+        Previous Research Reports
+      </h2>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {sortedReports.map((report) => (
+          <div
+            key={report.id}
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-150 overflow-hidden border border-gray-200 dark:border-gray-700"
+          >
+            <div className="p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2 line-clamp-2">
+                {report.title}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                {new Date(report.date).toLocaleDateString()}
               </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {sortedReports.map((report) => (
-                <div
-                  key={report.filename}
-                  className="border dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200"
+              <p className="text-gray-600 dark:text-gray-300 mb-6 line-clamp-3">
+                {report.summary}
+              </p>
+              <button
+                onClick={() => onViewReport(report.id)}
+                className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
+              >
+                View Report
+                <svg
+                  className="ml-2 -mr-1 h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">
-                        {report.title}
-                      </h3>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                        <span>
-                          {new Date(report.date).toLocaleDateString(undefined, {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
-                        <span>•</span>
-                        <span>{report.filename}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => onViewReport(report)}
-                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                      >
-                        View Report
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          window.open(`/api/reports/${encodeURIComponent(report.filename)}`, '_blank');
-                        }}
-                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                      >
-                        Download
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M14 5l7 7m0 0l-7 7m7-7H3"
+                  />
+                </svg>
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );

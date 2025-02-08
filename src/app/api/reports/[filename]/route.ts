@@ -1,49 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
+import { promises as fs } from 'fs';
 import path from 'path';
+
+const REPORTS_DIR = path.join(process.cwd(), 'reports');
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  context: { params: { filename: string } }
 ) {
-  if (!params?.filename) {
-    return NextResponse.json(
-      { error: 'Filename is required' },
-      { status: 400 }
-    );
-  }
-
-  const filename = decodeURIComponent(params.filename);
-  const reportsDir = path.join(process.cwd(), 'reports');
-  const filePath = path.join(reportsDir, filename);
-
   try {
-    // Security check to prevent directory traversal
-    if (!filePath.startsWith(reportsDir) || !filePath.endsWith('.md')) {
-      console.error('Invalid file request:', filePath);
+    // Ensure the filename is provided and sanitized
+    const filename = context.params?.filename;
+    if (!filename) {
       return NextResponse.json(
-        { error: 'Invalid file request' },
+        { error: 'Filename is required' },
         { status: 400 }
       );
     }
 
-    console.log('Reading report file:', filePath);
-    const content = await readFile(filePath, 'utf-8');
+    // Prevent directory traversal attacks
+    const sanitizedFilename = path.normalize(filename).replace(/^(\.\.(\/|\\))+/, '');
+    const filePath = path.join(REPORTS_DIR, sanitizedFilename);
+
+    // Check if the file exists
+    try {
+      await fs.access(filePath);
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Report not found' },
+        { status: 404 }
+      );
+    }
+
+    // Read and return the file
+    const content = await fs.readFile(filePath, 'utf-8');
     
+    // Set appropriate headers for markdown content
+    const headers = new Headers();
+    headers.set('Content-Type', 'text/markdown; charset=utf-8');
+    headers.set('Content-Disposition', `inline; filename="${sanitizedFilename}"`);
+
     return new NextResponse(content, {
-      headers: {
-        'Content-Type': 'text/markdown',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
+      status: 200,
+      headers,
     });
   } catch (error) {
-    console.error('Failed to read report:', error);
+    console.error('Error reading report:', error);
     return NextResponse.json(
-      { 
-        error: 'File not found',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 404 }
+      { error: 'Failed to read report' },
+      { status: 500 }
     );
   }
-} 
+}
+
+// Create the reports directory if it doesn't exist
+fs.mkdir(REPORTS_DIR, { recursive: true }).catch(console.error); 
