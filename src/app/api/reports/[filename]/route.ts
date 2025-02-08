@@ -53,5 +53,46 @@ export async function GET(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  context: { params: { filename: string } }
+) {
+  try {
+    // Ensure the filename is provided and sanitized
+    const filename = context.params?.filename;
+    if (!filename) {
+      return NextResponse.json(
+        { error: 'Filename is required' },
+        { status: 400 }
+      );
+    }
+
+    // Prevent directory traversal attacks
+    const sanitizedFilename = path.normalize(filename).replace(/^(\.\.(\/|\\))+/, '');
+    const filePath = path.join(REPORTS_DIR, `${sanitizedFilename}.md`);
+
+    // Check if the file exists
+    try {
+      await fs.access(filePath);
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Report not found' },
+        { status: 404 }
+      );
+    }
+
+    // Delete the file
+    await fs.unlink(filePath);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting report:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete report' },
+      { status: 500 }
+    );
+  }
+}
+
 // Create the reports directory if it doesn't exist
 fs.mkdir(REPORTS_DIR, { recursive: true }).catch(console.error); 

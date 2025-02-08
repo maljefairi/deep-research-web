@@ -22,8 +22,11 @@ interface ErrorDetails {
 }
 
 interface ResearchQuestion {
-  query: string;
-  researchGoal: string;
+  id: string;
+  question: string;
+  goal: string;
+  type: 'text' | 'multiline' | 'choice';
+  options?: string[];
 }
 
 export default function Home() {
@@ -132,7 +135,8 @@ export default function Home() {
     if (error instanceof Error) {
       setError(error.message);
       if ('details' in error) {
-        setErrorDetails(error as ErrorDetails);
+        const errorWithDetails = error as unknown as ErrorDetails;
+        setErrorDetails(errorWithDetails);
       }
     } else {
       setError('Research process failed');
@@ -140,6 +144,29 @@ export default function Home() {
     setCurrentStep('Error');
     setProgress(0);
     setIsLoading(false);
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    try {
+      const response = await fetch(`/api/reports/${reportId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete report');
+      }
+
+      // Remove the report from the state
+      setReports(reports.filter(r => r.id !== reportId));
+      
+      // If the deleted report was selected, clear the selection
+      if (selectedReport?.id === reportId) {
+        setSelectedReport(null);
+      }
+    } catch (error) {
+      console.error('Error deleting report:', error);
+      // You could add a toast notification here
+    }
   };
 
   return (
@@ -206,97 +233,101 @@ export default function Home() {
                     Download MD
                   </button>
                   <button
-                    onClick={() => {
-                      // Convert markdown to HTML and decode HTML entities
-                      const html = marked(report);
-                      const decoder = document.createElement('div');
-                      decoder.innerHTML = html;
-                      
-                      // Create PDF document with Unicode support
-                      const pdf = new jsPDF({
-                        orientation: 'portrait',
-                        unit: 'mm',
-                        format: 'a4',
-                        putOnlyUsedFonts: true
-                      });
-                      
-                      // Extract and clean title
-                      const title = report.split('\n')[0]
-                        .replace(/#/g, '')
-                        .trim()
-                        .replace(/&quot;/g, '"')
-                        .replace(/&#39;/g, "'")
-                        .replace(/&amp;/g, '&');
-                      
-                      // Set title
-                      pdf.setFontSize(16);
-                      pdf.text(title, 15, 15);
-                      
-                      // Set normal font size for content
-                      pdf.setFontSize(11);
-                      
-                      // Process content
-                      const content = decoder.textContent // Get clean text content
-                        .split('\n')
-                        .map(line => line.trim()) // Trim each line
-                        .filter(line => line && !line.startsWith('#')) // Remove empty lines and headers
-                        .join('\n\n'); // Add spacing between paragraphs
-                      
-                      const splitContent = pdf.splitTextToSize(content, 180);
-                      
-                      let yPosition = 30; // Start after title
-                      const lineHeight = 7;
-                      
-                      // Add content to PDF
-                      splitContent.forEach((line: string) => {
-                        if (yPosition > 280) {
-                          pdf.addPage();
-                          yPosition = 20;
-                        }
+                    onClick={async () => {
+                      try {
+                        // Convert markdown to HTML and decode HTML entities
+                        const html = marked.parse(report, { async: false }) as string;
+                        const decoder = document.createElement('div');
+                        decoder.innerHTML = html;
                         
-                        const cleanLine = line.trim()
+                        // Create PDF document with Unicode support
+                        const pdf = new jsPDF({
+                          orientation: 'portrait',
+                          unit: 'mm',
+                          format: 'a4',
+                          putOnlyUsedFonts: true
+                        });
+                        
+                        // Extract and clean title
+                        const title = report.split('\n')[0]
+                          .replace(/#/g, '')
+                          .trim()
                           .replace(/&quot;/g, '"')
                           .replace(/&#39;/g, "'")
                           .replace(/&amp;/g, '&');
                         
-                        if (cleanLine) {
-                          pdf.text(cleanLine, 15, yPosition);
-                          yPosition += lineHeight;
-                        }
-                      });
-                      
-                      // Add sources section if available
-                      const sourcesMatch = report.match(/## Sources\n\n([\s\S]+)$/);
-                      if (sourcesMatch) {
-                        pdf.addPage();
-                        pdf.setFontSize(14);
-                        pdf.text('Sources', 15, 20);
-                        pdf.setFontSize(10);
+                        // Set title
+                        pdf.setFontSize(16);
+                        pdf.text(title, 15, 15);
                         
-                        const sources = sourcesMatch[1]
+                        // Set normal font size for content
+                        pdf.setFontSize(11);
+                        
+                        // Process content
+                        const content = (decoder.textContent || '') // Add null check with default empty string
                           .split('\n')
-                          .filter(line => line.trim())
-                          .map(line => line.replace(/^- /, '')) // Remove bullet points
-                          .map(line => line
+                          .map(line => line.trim()) // Trim each line
+                          .filter(line => line && !line.startsWith('#')) // Remove empty lines and headers
+                          .join('\n\n'); // Add spacing between paragraphs
+                        
+                        const splitContent = pdf.splitTextToSize(content, 180);
+                        
+                        let yPosition = 30; // Start after title
+                        const lineHeight = 7;
+                        
+                        // Add content to PDF
+                        splitContent.forEach((line: string) => {
+                          if (yPosition > 280) {
+                            pdf.addPage();
+                            yPosition = 20;
+                          }
+                          
+                          const cleanLine = line.trim()
                             .replace(/&quot;/g, '"')
                             .replace(/&#39;/g, "'")
-                            .replace(/&amp;/g, '&')
-                          );
-                        
-                        let sourceY = 30;
-                        sources.forEach((source: string) => {
-                          if (sourceY > 280) {
-                            pdf.addPage();
-                            sourceY = 20;
+                            .replace(/&amp;/g, '&');
+                          
+                          if (cleanLine) {
+                            pdf.text(cleanLine, 15, yPosition);
+                            yPosition += lineHeight;
                           }
-                          pdf.text(source, 15, sourceY);
-                          sourceY += 6;
                         });
+                        
+                        // Add sources section if available
+                        const sourcesMatch = report.match(/## Sources\n\n([\s\S]+)$/);
+                        if (sourcesMatch) {
+                          pdf.addPage();
+                          pdf.setFontSize(14);
+                          pdf.text('Sources', 15, 20);
+                          pdf.setFontSize(10);
+                          
+                          const sources = sourcesMatch[1]
+                            .split('\n')
+                            .filter(line => line.trim())
+                            .map(line => line.replace(/^- /, '')) // Remove bullet points
+                            .map(line => line
+                              .replace(/&quot;/g, '"')
+                              .replace(/&#39;/g, "'")
+                              .replace(/&amp;/g, '&')
+                            );
+                          
+                          let sourceY = 30;
+                          sources.forEach((source: string) => {
+                            if (sourceY > 280) {
+                              pdf.addPage();
+                              sourceY = 20;
+                            }
+                            pdf.text(source, 15, sourceY);
+                            sourceY += 6;
+                          });
+                        }
+                        
+                        // Download PDF
+                        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                        pdf.save(`research-${timestamp}.pdf`);
+                      } catch (error) {
+                        console.error('Error generating PDF:', error);
                       }
-                      
-                      // Download PDF
-                      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                      pdf.save(`research-${timestamp}.pdf`);
                     }}
                     className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
                   >
@@ -455,7 +486,11 @@ export default function Home() {
 
           {/* Reports Grid */}
           {!selectedReport && !isLoading && reports.length > 0 && (
-            <ExistingReports reports={reports} onViewReport={handleViewReport} />
+            <ExistingReports
+              reports={reports}
+              onViewReport={handleViewReport}
+              onDeleteReport={handleDeleteReport}
+            />
           )}
         </div>
       </main>

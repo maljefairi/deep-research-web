@@ -2,9 +2,12 @@
 
 import React, { useState } from 'react';
 
-interface ResearchQuestion {
-  query: string;
-  researchGoal: string;
+export interface ResearchQuestion {
+  id: string;
+  question: string;
+  goal: string;
+  type: 'text' | 'multiline' | 'choice';
+  options?: string[];
 }
 
 interface ResearchQuestionsProps {
@@ -16,73 +19,99 @@ interface ResearchQuestionsProps {
 export default function ResearchQuestions({ questions, onSubmit, onBack }: ResearchQuestionsProps) {
   const [answers, setAnswers] = useState<string[]>(new Array(questions.length).fill(''));
 
+  const handleAnswerChange = (index: number, value: string) => {
+    const newAnswers = [...answers];
+    newAnswers[index] = value;
+    setAnswers(newAnswers);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(answers);
   };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              Research Questions
-            </h2>
+    <div className="max-w-3xl mx-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Additional Questions
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300">
+            Please answer these questions to help refine the research process.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {questions.map((q, index) => (
+            <div key={q.id} className="space-y-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor={`question-${q.id}`}
+                  className="block text-lg font-medium text-gray-900 dark:text-white"
+                >
+                  {q.question}
+                </label>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{q.goal}</p>
+              </div>
+
+              {q.type === 'choice' && q.options ? (
+                <div className="space-y-2">
+                  {q.options.map((option) => (
+                    <label
+                      key={option}
+                      className="flex items-center space-x-3 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name={`question-${q.id}`}
+                        value={option}
+                        checked={answers[index] === option}
+                        onChange={(e) => handleAnswerChange(index, e.target.value)}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-gray-700 dark:text-gray-300">{option}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : q.type === 'multiline' ? (
+                <textarea
+                  id={`question-${q.id}`}
+                  value={answers[index]}
+                  onChange={(e) => handleAnswerChange(index, e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Enter your answer..."
+                />
+              ) : (
+                <input
+                  type="text"
+                  id={`question-${q.id}`}
+                  value={answers[index]}
+                  onChange={(e) => handleAnswerChange(index, e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="Enter your answer..."
+                />
+              )}
+            </div>
+          ))}
+
+          <div className="flex justify-between pt-6">
             <button
+              type="button"
               onClick={onBack}
-              className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:hover:bg-gray-600"
             >
-              <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to Form
+              Back to Research Form
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              Start Research
             </button>
           </div>
-
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Please answer these questions to help focus the research and provide better results.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {questions.map((question, index) => (
-              <div key={index} className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <div>
-                  <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {question.query}
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    {question.researchGoal}
-                  </p>
-                </div>
-                <textarea
-                  value={answers[index]}
-                  onChange={(e) => {
-                    const newAnswers = [...answers];
-                    newAnswers[index] = e.target.value;
-                    setAnswers(newAnswers);
-                  }}
-                  rows={3}
-                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
-                  placeholder="Your answer..."
-                  required
-                />
-              </div>
-            ))}
-
-            <div className="flex justify-end pt-4">
-              <button
-                type="submit"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-              >
-                Start Research
-                <svg className="ml-2 -mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </button>
-            </div>
-          </form>
-        </div>
+        </form>
       </div>
     </div>
   );
