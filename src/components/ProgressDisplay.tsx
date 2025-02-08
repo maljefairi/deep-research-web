@@ -6,6 +6,7 @@ interface ProgressDisplayProps {
   learnings: string[];
   visitedUrls: string[];
   error?: string;
+  errorDetails?: string;
 }
 
 export default function ProgressDisplay({
@@ -13,7 +14,8 @@ export default function ProgressDisplay({
   progress,
   learnings,
   visitedUrls,
-  error
+  error,
+  errorDetails
 }: ProgressDisplayProps) {
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -73,6 +75,21 @@ export default function ProgressDisplay({
               </h3>
               <div className="mt-2 text-sm text-red-700 dark:text-red-300">
                 <p>{error}</p>
+                {errorDetails && (
+                  <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded">
+                    <pre className="whitespace-pre-wrap font-mono text-xs">
+                      {errorDetails}
+                    </pre>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300"
+                >
+                  Try Again
+                </button>
               </div>
             </div>
           </div>

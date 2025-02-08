@@ -1,25 +1,29 @@
 import { NextResponse } from 'next/server';
-import { spawn } from 'child_process';
-import { readFile, readdir } from 'fs/promises';
+import { readFile, readdir, stat, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
+import { deepResearch, writeFinalReport, generateInitialQuestions } from '@/lib/deep-research';
 
 // Function to get all existing research reports
-async function getExistingReports(deepResearchPath: string) {
+async function getExistingReports(reportsDir: string) {
   try {
-    const files = await readdir(deepResearchPath);
-    const reports = files
-      .filter(file => file.endsWith('.md') && file !== 'README.md')
-      .map(async file => {
-        const content = await readFile(path.join(deepResearchPath, file), 'utf-8');
-        const firstLine = content.split('\n')[0] || 'Untitled Research';
-        return {
-          filename: file,
-          title: firstLine.replace('#', '').trim(),
-          path: path.join(deepResearchPath, file),
-          date: new Date((await readFile(path.join(deepResearchPath, file))).mtime).toISOString()
-        };
-      });
-    return await Promise.all(reports);
+    const files = await readdir(reportsDir);
+    const reports = await Promise.all(
+      files
+        .filter(file => file.endsWith('.md') && file !== 'README.md')
+        .map(async file => {
+          const filePath = path.join(reportsDir, file);
+          const stats = await stat(filePath);
+          const content = await readFile(filePath, 'utf-8');
+          const firstLine = content.split('\n')[0] || 'Untitled Research';
+          return {
+            filename: file,
+            title: firstLine.replace('#', '').trim(),
+            path: filePath,
+            date: stats.mtime.toISOString()
+          };
+        })
+    );
+    return reports;
   } catch (error) {
     console.error('Error reading reports:', error);
     return [];
@@ -28,142 +32,161 @@ async function getExistingReports(deepResearchPath: string) {
 
 export async function GET() {
   try {
-    const deepResearchPath = path.join(process.cwd(), '..', 'deep-research');
-    const reports = await getExistingReports(deepResearchPath);
+    const reportsDir = path.join(process.cwd(), 'reports');
+    console.log('Reports directory:', reportsDir);
+
+    // Create reports directory if it doesn't exist
+    try {
+      await readdir(reportsDir);
+    } catch (error) {
+      console.log('Creating reports directory...');
+      await mkdir(reportsDir, { recursive: true });
+    }
+
+    const reports = await getExistingReports(reportsDir);
+    console.log('Found reports:', reports);
+
     return NextResponse.json({ reports });
   } catch (error) {
+    console.error('Failed to fetch reports:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch reports' },
+      { 
+        error: 'Failed to fetch reports',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request: Request) {
-  try {
-    const { query, breadth, depth } = await request.json();
-    const deepResearchPath = path.join(process.cwd(), '..', 'deep-research');
+  let currentProgress = 0;
+  let currentStep = '';
 
-    // Verify deep-research directory exists
-    try {
-      await readdir(deepResearchPath);
-    } catch (error) {
-      console.error('Deep research directory not found:', error);
-      return NextResponse.json(
-        { error: 'Deep research backend not found' },
-        { status: 500 }
-      );
+  try {
+    const body = await request.json();
+    const { query, breadth, depth, answers } = body;
+
+    if (!query) {
+      throw new Error('Missing required parameter: query');
     }
 
-    return new Promise((resolve) => {
-      // Start the deep-research process
-      const childProcess = spawn('node', ['src/run.ts'], {
-        cwd: deepResearchPath,
-        env: {
-          ...process.env,
-          PIPE_MODE: 'true',
-        },
-        shell: true
-      });
+    // If no answers provided, generate initial questions
+    if (!answers) {
+      console.log('Generating initial questions for:', query);
+      try {
+        const questions = await generateInitialQuestions(query);
+        return NextResponse.json({
+          status: 'questions',
+          questions,
+          progress: 5,
+          step: 'Gathering initial information',
+        });
+      } catch (error) {
+        console.error('Failed to generate questions:', error);
+        throw new Error('Failed to generate initial questions. Please try again.');
+      }
+    }
 
-      let stdoutData = '';
-      let stderrData = '';
+    // Validate research parameters
+    if (!breadth || !depth) {
+      throw new Error('Missing required parameters: breadth and depth are required');
+    }
 
-      // Handle process output
-      childProcess.stdout.on('data', (data) => {
-        const output = data.toString();
-        stdoutData += output;
-        console.log('Research output:', output);
-      });
+    if (breadth < 3 || breadth > 10) {
+      throw new Error('Breadth must be between 3 and 10');
+    }
 
-      childProcess.stderr.on('data', (data) => {
-        const error = data.toString();
-        stderrData += error;
-        console.error('Research error:', error);
-      });
+    if (depth < 1 || depth > 5) {
+      throw new Error('Depth must be between 1 and 5');
+    }
 
-      // Write inputs when prompted
-      childProcess.stdout.on('data', (data) => {
-        const output = data.toString();
-        if (output.includes('What would you like to research?')) {
-          childProcess.stdin.write(query + '\n');
-        } else if (output.includes('Enter research breadth')) {
-          childProcess.stdin.write(breadth + '\n');
-        } else if (output.includes('Enter research depth')) {
-          childProcess.stdin.write(depth + '\n');
-        }
-      });
+    const reportsDir = path.join(process.cwd(), 'reports');
+    console.log('Processing research request:', { query, breadth, depth, answers });
 
-      // Handle process completion
-      childProcess.on('close', async (code) => {
-        console.log('Research process exited with code:', code);
-        
-        if (code !== 0) {
-          console.error('Research failed with stderr:', stderrData);
-          resolve(
-            NextResponse.json(
-              { 
-                error: 'Research process failed',
-                details: stderrData
-              },
-              { status: 500 }
-            )
-          );
-          return;
-        }
+    // Create reports directory if it doesn't exist
+    try {
+      await readdir(reportsDir);
+    } catch (error) {
+      console.log('Creating reports directory...');
+      await mkdir(reportsDir, { recursive: true });
+    }
 
-        try {
-          // Read the output.md file
-          const reportPath = path.join(deepResearchPath, 'output.md');
-          const report = await readFile(reportPath, 'utf-8');
-          
-          // Get updated list of reports
-          const reports = await getExistingReports(deepResearchPath);
-
-          resolve(
-            NextResponse.json({
-              success: true,
-              output: stdoutData,
-              report,
-              reports
-            })
-          );
-        } catch (error) {
-          console.error('Failed to read research results:', error);
-          resolve(
-            NextResponse.json(
-              { 
-                error: 'Failed to read research results',
-                details: error instanceof Error ? error.message : 'Unknown error'
-              },
-              { status: 500 }
-            )
-          );
-        }
-      });
-
-      // Handle process errors
-      childProcess.on('error', (error) => {
-        console.error('Failed to start research process:', error);
-        resolve(
-          NextResponse.json(
-            { 
-              error: 'Failed to start research process',
-              details: error.message
-            },
-            { status: 500 }
-          )
-        );
-      });
+    const { learnings, visitedUrls } = await deepResearch({
+      query,
+      answers,
+      breadth,
+      depth,
+      onProgress: (progress, step) => {
+        currentProgress = progress;
+        currentStep = step;
+        console.log(`Research progress: ${progress}% - ${step}`);
+      }
     });
+
+    if (!learnings.length) {
+      throw new Error('No results found. Please try adjusting your search parameters or try again later.');
+    }
+
+    // Generate the final report
+    console.log('Generating final report...');
+    try {
+      const report = await writeFinalReport({
+        prompt: query,
+        learnings,
+        visitedUrls
+      });
+
+      // Save the report
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `research-${timestamp}.md`;
+      const reportPath = path.join(reportsDir, filename);
+      await writeFile(reportPath, report, 'utf-8');
+      console.log('Report saved:', reportPath);
+
+      // Get updated list of reports
+      const reports = await getExistingReports(reportsDir);
+
+      return NextResponse.json({
+        status: 'complete',
+        success: true,
+        report,
+        reports,
+        progress: 100,
+        step: 'Research complete',
+        learnings,
+        visitedUrls
+      });
+    } catch (error) {
+      console.error('Failed to generate final report:', error);
+      // Return partial results even if report generation fails
+      return NextResponse.json({
+        status: 'partial',
+        success: true,
+        learnings,
+        visitedUrls,
+        progress: currentProgress,
+        step: 'Research completed but report generation failed',
+      });
+    }
   } catch (error) {
-    console.error('Request processing error:', error);
+    console.error('Research failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Research process failed';
+    const isRateLimit = errorMessage.toLowerCase().includes('rate limit');
+    
     return NextResponse.json(
       { 
-        error: 'Invalid request',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        status: 'error',
+        error: errorMessage,
+        details: isRateLimit 
+          ? 'The research service is temporarily busy. Please wait 30-60 seconds and try again.'
+          : error instanceof Error ? error.message : 'Unknown error',
+        progress: currentProgress,
+        step: currentStep || 'Error'
       },
-      { status: 400 }
+      { 
+        status: isRateLimit ? 429 : 500 
+      }
     );
   }
 } 

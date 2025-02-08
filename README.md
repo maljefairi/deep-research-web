@@ -1,36 +1,126 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Deep Research Web Application
+
+A web-based interface for conducting deep research using AI-powered tools and web crawling capabilities.
+
+## Project Structure
+
+```
+deep-research-web/
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   └── research/
+│   │   │       └── route.ts       # API endpoint for research operations
+│   │   ├── components/
+│   │   │   ├── ExistingReports.tsx   # Component for displaying existing reports
+│   │   │   ├── ProgressDisplay.tsx    # Component for showing research progress
+│   │   │   └── ResearchForm.tsx       # Form component for research input
+│   │   └── page.tsx               # Main application page
+│   ├── lib/
+│   │   ├── deep-research/
+│   │   │   ├── index.ts           # Core research implementation
+│   │   │   ├── prompts.ts         # AI system prompts
+│   │   │   └── providers.ts       # AI provider configurations
+│   │   └── utils/                 # Utility functions
+└── reports/                       # Directory for storing research reports
+```
+
+## Core Components
+
+### Research Implementation (`/lib/deep-research/index.ts`)
+- Implements the core research logic using AI and web crawling
+- Manages research depth and breadth
+- Handles progress tracking and error reporting
+
+### AI Integration (`/lib/deep-research/providers.ts`)
+- Configures OpenAI integration
+- Manages API keys and model settings
+- Implements token management and prompt optimization
+
+### System Prompts (`/lib/deep-research/prompts.ts`)
+- Defines AI system behavior and instructions
+- Contains templates for research queries and analysis
+
+### API Route (`/api/research/route.ts`)
+- Handles research requests and report management
+- Implements file system operations for report storage
+- Provides progress updates and error handling
+
+## Frontend Components
+
+### Main Page (`/app/page.tsx`)
+- Orchestrates the research interface
+- Manages application state and error handling
+- Coordinates between form input and research display
+
+### Research Form (`/components/ResearchForm.tsx`)
+- Handles user input for research parameters
+- Validates input and manages form state
+- Triggers research process
+
+### Progress Display (`/components/ProgressDisplay.tsx`)
+- Shows real-time research progress
+- Displays error messages and status updates
+- Provides visual feedback during research
+
+### Existing Reports (`/components/ExistingReports.tsx`)
+- Lists previously generated research reports
+- Manages report viewing and navigation
+- Displays report metadata
 
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+2. Set up environment variables:
+   ```
+   OPENAI_API_KEY=your_api_key
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. Run the development server:
+   ```bash
+   npm run dev
+   ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Development Guidelines
 
-## Learn More
+1. **Error Handling**
+   - Implement comprehensive error handling at all levels
+   - Provide clear error messages to users
+   - Log errors appropriately for debugging
 
-To learn more about Next.js, take a look at the following resources:
+2. **Progress Tracking**
+   - Use the progress callback system for real-time updates
+   - Ensure accurate progress reporting
+   - Handle edge cases and failures gracefully
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Code Organization**
+   - Keep components focused and single-responsibility
+   - Use TypeScript for type safety
+   - Document complex logic and important functions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. **Performance**
+   - Implement proper token management for AI calls
+   - Optimize web crawling operations
+   - Use appropriate caching strategies
 
-## Deploy on Vercel
+## Future Improvements
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Add support for multiple AI providers
+2. Implement advanced research customization options
+3. Add report export functionality
+4. Enhance error recovery mechanisms
+5. Implement user authentication and report sharing
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request

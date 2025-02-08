@@ -7,17 +7,19 @@ export async function GET(
   { params }: { params: { filename: string } }
 ) {
   try {
-    const deepResearchPath = path.join(process.cwd(), '..', 'deep-research');
-    const filePath = path.join(deepResearchPath, params.filename);
+    const reportsDir = path.join(process.cwd(), 'reports');
+    const filePath = path.join(reportsDir, params.filename);
 
     // Security check to prevent directory traversal
-    if (!filePath.startsWith(deepResearchPath) || !filePath.endsWith('.md')) {
+    if (!filePath.startsWith(reportsDir) || !filePath.endsWith('.md')) {
+      console.error('Invalid file request:', filePath);
       return NextResponse.json(
         { error: 'Invalid file request' },
         { status: 400 }
       );
     }
 
+    console.log('Reading report file:', filePath);
     const content = await readFile(filePath, 'utf-8');
     
     return new NextResponse(content, {
@@ -27,8 +29,12 @@ export async function GET(
       },
     });
   } catch (error) {
+    console.error('Failed to read report:', error);
     return NextResponse.json(
-      { error: 'File not found' },
+      { 
+        error: 'File not found',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 404 }
     );
   }
