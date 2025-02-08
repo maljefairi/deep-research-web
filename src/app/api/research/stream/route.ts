@@ -1,13 +1,13 @@
 import { NextRequest } from 'next/server';
-import { deepResearch, writeFinalReport } from '@/lib/deep-research';
+import { deepResearch, writeFinalReport, generateResearchPlan } from '@/lib/deep-research';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
-const REPORTS_DIR = path.join(process.cwd(), 'reports');
+const REPORTS_DIR = path.join(process.cwd(), 'final_reports');
 
-// Ensure reports directory exists
-fs.mkdir(REPORTS_DIR, { recursive: true }).catch(console.error);
+// Ensure reports directory exists with proper permissions
+fs.mkdir(REPORTS_DIR, { recursive: true, mode: 0o755 }).catch(console.error);
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   (async () => {
     try {
       await sendUpdate({
-        progress: 10,
+        progress: 5,
         step: 'Starting research...',
         logs: ['Initializing research process...'],
       });
@@ -51,14 +51,41 @@ export async function GET(request: NextRequest) {
         throw new Error('Invalid answers format - Please check your input and try again');
       }
 
+      // Generate research plan
+      await sendUpdate({
+        progress: 10,
+        step: 'Generating research plan...',
+        logs: ['Creating table of contents and research structure...'],
+      });
+
+      const researchPlan = await generateResearchPlan({
+        query,
+        answers: parsedAnswers,
+      });
+
+      // Send the research plan to the client
+      await sendUpdate({
+        progress: 15,
+        step: 'Research plan generated',
+        logs: [
+          'Research plan created successfully',
+          `Title: ${researchPlan.tableOfContents.title}`,
+          'Sections:',
+          ...researchPlan.tableOfContents.sections.map(s => `- ${s.heading}`),
+        ],
+        researchPlan,
+      });
+
+      // Start the actual research based on the plan
       const { learnings, visitedUrls } = await deepResearch({
         query,
         answers: parsedAnswers,
         breadth: parseInt(breadth),
         depth: parseInt(depth),
+        researchPlan,
         onProgress: async (progress: number, step: string) => {
           await sendUpdate({
-            progress,
+            progress: Math.min(15 + (progress * 0.75), 90), // Scale progress to leave room for final steps
             step,
             logs: [`${step} (${progress}%)`],
           });
@@ -114,6 +141,7 @@ export async function GET(request: NextRequest) {
           visitedUrls,
           logs: ['Research completed successfully', 'Report saved'],
           reportMeta,
+          researchPlan,
         });
       } catch (error) {
         console.error('Error saving report:', error);

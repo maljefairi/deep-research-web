@@ -250,144 +250,157 @@ export async function writeFinalReport({
   return finalReport;
 }
 
+interface ResearchPlan {
+  tableOfContents: {
+    title: string;
+    sections: {
+      heading: string;
+      subheadings: string[];
+      researchQueries: string[];
+    }[];
+  };
+  estimatedDepth: number;
+  estimatedBreadth: number;
+}
+
+// Generate research plan with table of contents
+export async function generateResearchPlan({
+  query,
+  answers,
+}: {
+  query: string;
+  answers: string[];
+}): Promise<ResearchPlan> {
+  console.log('Generating research plan for:', query);
+  const res = await generateObject({
+    model: o3MiniModel,
+    system: systemPrompt(),
+    prompt: `Given the research topic and preliminary answers, create a detailed research plan with a table of contents. The plan should be comprehensive and well-structured.
+
+Topic: <topic>${query}</topic>
+
+Preliminary Answers:
+${answers.map((answer, i) => `${i + 1}. ${answer}`).join('\n')}
+
+Create a research plan that:
+1. Has a clear structure with main sections and subsections
+2. Includes specific research queries for each section
+3. Suggests optimal research depth and breadth
+4. Ensures comprehensive coverage of the topic`,
+    schema: z.object({
+      tableOfContents: z.object({
+        title: z.string(),
+        sections: z.array(z.object({
+          heading: z.string(),
+          subheadings: z.array(z.string()),
+          researchQueries: z.array(z.string()).describe('Specific search queries to research this section'),
+        })),
+      }),
+      estimatedDepth: z.number().min(1).max(5),
+      estimatedBreadth: z.number().min(3).max(10),
+    }),
+  });
+
+  return res.object;
+}
+
+// Modify the deepResearch function to use the research plan
 export async function deepResearch({
   query,
   answers,
   breadth,
   depth,
+  researchPlan,
   learnings = [],
   visitedUrls = [],
   onProgress,
-  progress = { totalQueries: 0, depthIterations: 0 },
 }: {
   query: string;
   answers: string[];
   breadth: number;
   depth: number;
+  researchPlan: ResearchPlan;
   learnings?: string[];
   visitedUrls?: string[];
   onProgress?: (progress: number, step: string) => void;
-  progress?: Partial<ResearchProgress>;
 }): Promise<ResearchResult> {
   try {
-    console.log('Starting deep research:', { query, breadth, depth });
+    console.log('Starting deep research with plan:', { query, breadth, depth });
     
-    // Check termination conditions
-    if (progress.totalQueries >= MAX_TOTAL_QUERIES) {
-      console.log('Reached maximum total queries limit');
-      return { learnings, visitedUrls };
-    }
-
-    if (progress.depthIterations >= MAX_DEPTH_ITERATIONS) {
-      console.log('Reached maximum depth iterations limit');
-      return { learnings, visitedUrls };
-    }
-
-    onProgress?.(10, 'Generating search queries');
+    onProgress?.(10, 'Starting research based on plan...');
     
-    const serpQueries = await generateSerpQueries({
-      query,
-      answers,
-      learnings,
-      numQueries: Math.min(breadth, 3), // Limit number of queries
-    });
-
-    const limit = pLimit(ConcurrencyLimit);
-    let currentProgress = 25;
-    const progressStep = 50 / (serpQueries.length * depth);
-
-    onProgress?.(currentProgress, 'Searching and analyzing sources');
+    const totalSections = researchPlan.tableOfContents.sections.length;
+    let currentProgress = 10;
+    const progressPerSection = 80 / totalSections;
 
     const results = await Promise.all(
-      serpQueries.map(serpQuery =>
-        limit(async () => {
-          try {
-            console.log('Processing query:', serpQuery.query);
-            progress.totalQueries = (progress.totalQueries || 0) + 1;
-            
-            // Add delay between requests
-            await delay(RequestDelay);
-            
-            const result = await retryWithDelay(() => 
-              firecrawl.search(serpQuery.query, {
-                timeout: 15000,
-                limit: 3,
-                scrapeOptions: { formats: ['markdown'] },
-              })
-            );
+      researchPlan.tableOfContents.sections.map(async (section, sectionIndex) => {
+        onProgress?.(
+          currentProgress,
+          `Researching section: ${section.heading}`
+        );
 
-            // Collect URLs from this search
-            const newUrls = compact(result.data.map(item => item.url));
-            const newBreadth = Math.ceil(breadth / 2);
-            const newDepth = depth - 1;
-
-            currentProgress += progressStep;
-            onProgress?.(
-              Math.min(currentProgress, 90),
-              'Processing search results'
-            );
-
-            const newLearnings = await processSerpResult({
-              query: serpQuery.query,
-              result,
-              numFollowUpQuestions: newBreadth,
-            });
-
-            const allLearnings = [...learnings, ...newLearnings.learnings];
-            const allUrls = [...visitedUrls, ...newUrls];
-
-            if (newDepth > 0 && newLearnings.followUpQuestions.length > 0) {
-              progress.depthIterations = (progress.depthIterations || 0) + 1;
+        const sectionResults = await Promise.all(
+          section.researchQueries.map(async (query) => {
+            try {
+              await delay(RequestDelay);
               
-              if (progress.depthIterations >= MAX_DEPTH_ITERATIONS) {
-                return { learnings: allLearnings, visitedUrls: allUrls };
-              }
-
-              onProgress?.(
-                Math.min(currentProgress + progressStep, 90),
-                'Researching deeper'
+              const result = await retryWithDelay(() => 
+                firecrawl.search(query, {
+                  timeout: 15000,
+                  limit: 3,
+                  scrapeOptions: { formats: ['markdown'] },
+                })
               );
-              
-              const nextQuery = newLearnings.followUpQuestions[0];
 
-              return deepResearch({
-                query: nextQuery,
-                answers,
-                breadth: Math.min(newBreadth, 2),
-                depth: newDepth,
-                learnings: allLearnings,
-                visitedUrls: allUrls,
-                onProgress,
-                progress,
+              const newUrls = compact(result.data.map(item => item.url));
+              const newLearnings = await processSerpResult({
+                query,
+                result,
+                numFollowUpQuestions: 1,
               });
-            } else {
+
               return {
-                learnings: allLearnings,
-                visitedUrls: allUrls,
+                learnings: newLearnings.learnings,
+                visitedUrls: newUrls,
               };
+            } catch (error) {
+              console.error(`Error processing query "${query}":`, error);
+              return { learnings: [], visitedUrls: [] };
             }
-          } catch (error) {
-            console.error(`Error processing query "${serpQuery.query}":`, error);
-            return {
-              learnings,
-              visitedUrls,
-            };
-          }
-        }),
-      ),
+          })
+        );
+
+        currentProgress += progressPerSection;
+        onProgress?.(
+          Math.min(currentProgress, 90),
+          `Completed section: ${section.heading}`
+        );
+
+        return sectionResults;
+      })
     );
 
-    // Combine and deduplicate results
+    // Combine all results
     const finalResults = {
-      learnings: [...new Set(results.flatMap(r => r.learnings))],
-      visitedUrls: [...new Set(results.flatMap(r => r.visitedUrls))],
+      learnings: [
+        ...learnings,
+        ...new Set(results.flatMap(sectionResults => 
+          sectionResults.flatMap(result => result.learnings)
+        )),
+      ],
+      visitedUrls: [
+        ...visitedUrls,
+        ...new Set(results.flatMap(sectionResults => 
+          sectionResults.flatMap(result => result.visitedUrls)
+        )),
+      ],
     };
 
     console.log('Research complete with:', {
       totalLearnings: finalResults.learnings.length,
       totalUrls: finalResults.visitedUrls.length,
-      totalQueries: progress.totalQueries,
-      depthIterations: progress.depthIterations,
+      totalSections: totalSections,
     });
 
     return finalResults;

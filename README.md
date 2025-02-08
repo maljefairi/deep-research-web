@@ -4,22 +4,149 @@ An AI-powered research assistant that helps you conduct comprehensive research o
 
 ## Features
 
-- 🤖 AI-powered research process
-- 🌐 Intelligent web crawling
+- 🤖 AI-powered research process with structured planning
+- 🌐 Intelligent web crawling and source analysis
 - 📝 Interactive question-answer based research
-- 📊 Real-time progress tracking
-- 📑 Markdown and PDF report generation
-- 📚 Research history management
+- 📊 Real-time progress tracking with detailed logs
+- 📑 Markdown report generation with automatic TOC
+- 📚 Research history management in dedicated storage
 - 🌓 Dark mode support
 - 📱 Responsive design
 
 ## Tech Stack
 
-- **Frontend**: Next.js, React, TypeScript, TailwindCSS
+- **Frontend**: Next.js 14+, React, TypeScript, TailwindCSS
 - **AI**: OpenAI gpt-4o-mini, Marked
 - **Web Crawling**: Firecrawl
 - **PDF Generation**: jsPDF
 - **Styling**: Tailwind CSS with Typography plugin
+
+## Project Structure
+
+```
+deep-research-web/
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── research/
+│   │   │   │   ├── stream/     # Research streaming endpoint
+│   │   │   │   └── questions/  # Research questions endpoint
+│   │   │   └── reports/        # Report management endpoints
+│   │   ├── components/         # React components
+│   │   └── pages/             # Application pages
+│   ├── lib/
+│   │   ├── deep-research/     # Core research logic
+│   │   └── ai/               # AI integration
+├── public/                   # Static assets
+└── final_reports/           # Generated research reports
+```
+
+## Key Components
+
+### API Endpoints
+
+1. Research Flow:
+   - `POST /api/research/questions`: Generates initial research questions
+   - `GET /api/research/stream`: Handles real-time research updates with SSE
+   
+2. Report Management:
+   - `GET /api/reports`: Lists all research reports with metadata
+   - `GET /api/reports/[id]`: Retrieves specific report content by ID
+   - `DELETE /api/reports/[id]`: Deletes a specific report by ID
+
+API Route Parameters:
+- `[id]`: Unique identifier for each report (UUID format)
+
+Example API Usage:
+```typescript
+// List all reports
+const reports = await fetch('/api/reports').then(r => r.json());
+
+// Get specific report
+const report = await fetch(`/api/reports/${reportId}`).then(r => r.json());
+
+// Delete report
+await fetch(`/api/reports/${reportId}`, { method: 'DELETE' });
+```
+
+### Frontend Components
+
+1. Research Process:
+   - `ResearchForm.tsx`: Initial research parameters
+   - `ResearchQuestions.tsx`: Question verification
+   - `ProgressDisplay.tsx`: Real-time progress tracking
+   
+2. Results Display:
+   - `ResultsView.tsx`: Markdown rendering
+   - `ExistingReports.tsx`: Report history sidebar
+
+## Research Process Flow
+
+1. **Initial Setup** (5%):
+   - Validate input parameters
+   - Initialize research session
+
+2. **Research Planning** (10-15%):
+   - Generate research plan
+   - Create table of contents
+   - Define research sections
+
+3. **Deep Research** (15-90%):
+   - Execute section-based research
+   - Process search results
+   - Gather learnings
+   - Track visited sources
+
+4. **Report Generation** (90-95%):
+   - Compile findings
+   - Generate structured report
+   - Format with markdown
+
+5. **Finalization** (95-100%):
+   - Save report to final_reports
+   - Update report metadata
+   - Send completion notification
+
+## Report Storage Structure
+
+Reports are stored in the `final_reports` directory with the following structure:
+
+```
+final_reports/
+├── [uuid].md         # Report content files
+└── .gitkeep         # Ensures directory exists in git
+```
+
+Each report file contains:
+1. Title (H1 header)
+2. Summary (First paragraph)
+3. Table of Contents
+4. Research Sections
+5. Sources List
+
+## API Response Formats
+
+1. Report Listing:
+```typescript
+interface ReportListing {
+  id: string;
+  title: string;
+  summary: string;
+  date: string;
+  path: string;
+}
+```
+
+2. Report Content:
+```typescript
+interface ReportContent {
+  id: string;
+  title: string;
+  summary: string;
+  content: string;
+  date: string;
+}
+```
 
 ## Getting Started
 
@@ -47,95 +174,74 @@ An AI-powered research assistant that helps you conduct comprehensive research o
    ```bash
    cp .env.example .env.local
    ```
-   Edit `.env.local` and add your API keys:
+   Required variables:
    - `NEXT_PUBLIC_FIRECRAWL_KEY`: Your Firecrawl API key
    - `NEXT_PUBLIC_OPENAI_KEY`: Your OpenAI API key
-   - `NEXT_PUBLIC_OPENAI_MODEL`: OpenAI model to use (default: gpt-4o-mini)
-   - `CONTEXT_SIZE`: Maximum context size for text processing
+   - `NEXT_PUBLIC_OPENAI_MODEL`: OpenAI model (default: gpt-4o-mini)
+   - `CONTEXT_SIZE`: Maximum context size (default: 128000)
 
-4. Start the development server:
+4. Create required directories:
+   ```bash
+   mkdir -p final_reports
+   chmod 755 final_reports
+   ```
+
+5. Start the development server:
    ```bash
    npm run dev
    ```
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser
-
-## Usage
-
-1. **Starting Research**:
-   - Enter your research topic
-   - Adjust research breadth (3-10) and depth (1-5)
-   - Click "Start Research"
-
-2. **Answer Questions**:
-   - The AI will generate preliminary questions
-   - Answer them to help focus the research
-   - Submit answers to begin the research process
-
-3. **Research Process**:
-   - Watch real-time progress updates
-   - View recent discoveries as they happen
-   - See sources being analyzed
-
-4. **View Results**:
-   - Read the generated research report
-   - Download in Markdown or PDF format
-   - Access previous reports from the sidebar
-
-## Project Structure
-
-```
-deep-research-web/
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── research/     # Research API endpoints
-│   │   │   └── reports/      # Report management endpoints
-│   │   ├── components/       # React components
-│   │   └── page.tsx         # Main application page
-│   ├── lib/
-│   │   ├── deep-research/   # Core research logic
-│   │   └── ai/             # AI integration
-├── public/                 # Static assets
-└── reports/               # Generated research reports
-```
-
-## Key Components
-
-- `ResearchForm`: Handles research input and parameters
-- `ProgressDisplay`: Shows real-time research progress
-- `ResultsView`: Displays research results with Markdown rendering
-- `deep-research.ts`: Core research implementation
-- `api/research/route.ts`: Research API endpoint
-- `api/reports/route.ts`: Report management endpoint
-
 ## Development Guidelines
 
 1. **Code Organization**:
+   - Follow the established directory structure
    - Keep components focused and single-responsibility
    - Use TypeScript for type safety
-   - Follow the existing file structure
 
-2. **Styling**:
-   - Use Tailwind CSS classes
-   - Follow dark mode conventions
-   - Maintain responsive design
+2. **Research Process**:
+   - Implement proper error handling
+   - Add progress tracking
+   - Save intermediate results
+   - Handle rate limits
 
-3. **Error Handling**:
-   - Implement comprehensive error handling
-   - Provide user-friendly error messages
-   - Log errors appropriately
+3. **Report Management**:
+   - Use unique IDs for reports
+   - Include metadata in reports
+   - Implement proper file permissions
+   - Handle file operations safely
 
-4. **Performance**:
-   - Optimize API calls
-   - Implement proper caching
+4. **Performance Considerations**:
+   - Implement request throttling
    - Handle large documents efficiently
+   - Use proper caching strategies
+   - Monitor API rate limits
 
-## API Rate Limits
+## Error Handling
 
-- Firecrawl: Implement delays between requests
-- OpenAI: Handle token limits and context windows
-- Add appropriate error handling for rate limits
+1. Research Process:
+   - Invalid input parameters
+   - Rate limiting
+   - API failures
+   - Timeout handling
+
+2. File Operations:
+   - Directory access
+   - File permissions
+   - Storage limits
+   - Concurrent access
+
+## Security Considerations
+
+1. File System:
+   - Proper directory permissions (0o755)
+   - Sanitized file paths
+   - Protected report access
+
+2. API Endpoints:
+   - Input validation
+   - Rate limiting
+   - Error handling
+   - Secure headers
 
 ## Contributing
 
@@ -152,6 +258,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgments
 
 - OpenAI for GPT models
-- Firecrawl for web crawling capabilities
-- Next.js team for the framework
-- TailwindCSS for styling utilities
+- Firecrawl for web crawling
+- Next.js team
+- TailwindCSS team
