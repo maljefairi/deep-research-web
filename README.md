@@ -16,7 +16,7 @@ An AI-powered research assistant that helps you conduct comprehensive research o
 ## Tech Stack
 
 - **Frontend**: Next.js, React, TypeScript, TailwindCSS
-- **AI**: OpenAI GPT-4, Marked
+- **AI**: OpenAI gpt-4o-mini, Marked
 - **Web Crawling**: Firecrawl
 - **PDF Generation**: jsPDF
 - **Styling**: Tailwind CSS with Typography plugin
@@ -50,7 +50,7 @@ An AI-powered research assistant that helps you conduct comprehensive research o
    Edit `.env.local` and add your API keys:
    - `NEXT_PUBLIC_FIRECRAWL_KEY`: Your Firecrawl API key
    - `NEXT_PUBLIC_OPENAI_KEY`: Your OpenAI API key
-   - `NEXT_PUBLIC_OPENAI_MODEL`: OpenAI model to use (default: gpt-4-turbo)
+   - `NEXT_PUBLIC_OPENAI_MODEL`: OpenAI model to use (default: gpt-4o-mini)
    - `CONTEXT_SIZE`: Maximum context size for text processing
 
 4. Start the development server:

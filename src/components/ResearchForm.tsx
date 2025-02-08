@@ -15,10 +15,19 @@ export default function ResearchForm({ onSubmit }: ResearchFormProps) {
   const [breadth, setBreadth] = useState(6);
   const [depth, setDepth] = useState(3);
   const [showHelp, setShowHelp] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ query, breadth, depth });
+    if (isSubmitting) return; // Prevent multiple submissions
+    
+    setIsSubmitting(true);
+    try {
+      await onSubmit({ query, breadth, depth });
+    } catch (error) {
+      console.error('Submission error:', error);
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -28,6 +37,7 @@ export default function ResearchForm({ onSubmit }: ResearchFormProps) {
         <button
           onClick={() => setShowHelp(!showHelp)}
           className="text-indigo-600 hover:text-indigo-700 flex items-center space-x-1"
+          disabled={isSubmitting}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
@@ -129,6 +139,7 @@ export default function ResearchForm({ onSubmit }: ResearchFormProps) {
             rows={4}
             placeholder="Example: What are the latest developments in quantum computing and their potential impact on cryptography?"
             required
+            disabled={isSubmitting}
           />
         </div>
 
@@ -156,6 +167,7 @@ export default function ResearchForm({ onSubmit }: ResearchFormProps) {
                 max={10}
                 className="w-20 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-600"
                 required
+                disabled={isSubmitting}
               />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Current: {
@@ -215,6 +227,7 @@ export default function ResearchForm({ onSubmit }: ResearchFormProps) {
                 max={5}
                 className="w-20 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-600"
                 required
+                disabled={isSubmitting}
               />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Current: {
@@ -285,9 +298,24 @@ export default function ResearchForm({ onSubmit }: ResearchFormProps) {
         <div>
           <button
             type="submit"
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150"
+            disabled={isSubmitting}
+            className={`w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+              isSubmitting 
+                ? 'bg-indigo-400 cursor-not-allowed' 
+                : 'bg-indigo-600 hover:bg-indigo-700'
+            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150`}
           >
-            Start Research
+            {isSubmitting ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Preparing Research...
+              </>
+            ) : (
+              'Start Research'
+            )}
           </button>
         </div>
       </form>

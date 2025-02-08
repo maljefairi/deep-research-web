@@ -25,7 +25,7 @@ export async function GET(
     // Check if the file exists
     try {
       await fs.access(filePath);
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Report not found' },
         { status: 404 }
@@ -45,9 +45,9 @@ export async function GET(
       headers,
     });
   } catch (error) {
-    console.error('Error reading report:', error);
+    console.error('Error reading report:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
-      { error: 'Failed to read report' },
+      { error: 'Failed to read report', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
@@ -74,7 +74,7 @@ export async function DELETE(
     // Check if the file exists
     try {
       await fs.access(filePath);
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Report not found' },
         { status: 404 }
@@ -86,13 +86,15 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting report:', error);
+    console.error('Error deleting report:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
-      { error: 'Failed to delete report' },
+      { error: 'Failed to delete report', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
 }
 
 // Create the reports directory if it doesn't exist
-fs.mkdir(REPORTS_DIR, { recursive: true }).catch(console.error); 
+fs.mkdir(REPORTS_DIR, { recursive: true }).catch(error => {
+  console.error('Error creating reports directory:', error instanceof Error ? error.message : 'Unknown error');
+}); 

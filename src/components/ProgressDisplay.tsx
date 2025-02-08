@@ -8,6 +8,7 @@ interface ProgressDisplayProps {
   error?: string;
   learnings?: string[];
   visitedUrls?: string[];
+  logs?: string[];
 }
 
 export default function ProgressDisplay({
@@ -16,6 +17,7 @@ export default function ProgressDisplay({
   error,
   learnings = [],
   visitedUrls = [],
+  logs = [],
 }: ProgressDisplayProps) {
   return (
     <div className="space-y-6 max-w-2xl mx-auto mb-8">
@@ -39,12 +41,53 @@ export default function ProgressDisplay({
             </div>
           </div>
 
-          {/* Current Step */}
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Current Step
-            </h3>
-            <p className="text-gray-900 dark:text-gray-100">{currentStep}</p>
+          {/* Terminal-like Progress Display */}
+          <div className="mb-6 font-mono text-sm">
+            <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+              <div className="space-y-2 text-gray-300">
+                {logs.map((log, index) => {
+                  // Format different types of logs
+                  if (log.startsWith('Error:')) {
+                    return (
+                      <div key={index} className="text-red-400">
+                        <span className="text-red-500">!</span> {log}
+                      </div>
+                    );
+                  }
+                  
+                  if (log.startsWith('Found') || log.startsWith('Analyzed')) {
+                    return (
+                      <div key={index} className="text-green-400">
+                        <span className="text-green-500">✓</span> {log}
+                      </div>
+                    );
+                  }
+
+                  if (log.startsWith('-')) {
+                    return (
+                      <div key={index} className="pl-4 text-gray-400">
+                        {log}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={index} className="whitespace-pre-wrap">
+                      <span className="text-blue-400">$</span> {log}
+                      {index === logs.length - 1 && progress < 100 && (
+                        <span className="animate-pulse">...</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {currentStep && progress < 100 && (
+                  <div className="whitespace-pre-wrap text-yellow-400">
+                    <span className="text-yellow-500">⟳</span> {currentStep}
+                    <span className="animate-pulse">...</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Error Display */}
