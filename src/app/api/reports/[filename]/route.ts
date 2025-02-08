@@ -1,15 +1,23 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import path from 'path';
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { filename: string } }
 ) {
-  try {
-    const reportsDir = path.join(process.cwd(), 'reports');
-    const filePath = path.join(reportsDir, params.filename);
+  if (!params?.filename) {
+    return NextResponse.json(
+      { error: 'Filename is required' },
+      { status: 400 }
+    );
+  }
 
+  const filename = decodeURIComponent(params.filename);
+  const reportsDir = path.join(process.cwd(), 'reports');
+  const filePath = path.join(reportsDir, filename);
+
+  try {
     // Security check to prevent directory traversal
     if (!filePath.startsWith(reportsDir) || !filePath.endsWith('.md')) {
       console.error('Invalid file request:', filePath);
@@ -25,7 +33,7 @@ export async function GET(
     return new NextResponse(content, {
       headers: {
         'Content-Type': 'text/markdown',
-        'Content-Disposition': `attachment; filename="${params.filename}"`,
+        'Content-Disposition': `attachment; filename="${filename}"`,
       },
     });
   } catch (error) {

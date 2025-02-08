@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import ResearchForm from '@/components/ResearchForm';
 import ProgressDisplay from '@/components/ProgressDisplay';
 import ResultsView from '@/components/ResultsView';
+import jsPDF from 'jspdf';
+import { marked } from 'marked';
 
 interface Report {
   filename: string;
@@ -323,9 +325,9 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Download button for current report */}
+      {/* Download buttons for current report */}
       {report && !error && (
-        <div className="fixed bottom-6 right-6">
+        <div className="fixed bottom-6 right-6 flex space-x-4">
           <button
             onClick={() => {
               const blob = new Blob([report], { type: 'text/markdown' });
@@ -345,7 +347,107 @@ export default function Home() {
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            Download Report
+            Download MD
+          </button>
+          <button
+            onClick={() => {
+              // Convert markdown to HTML and decode HTML entities
+              const html = marked(report);
+              const decoder = document.createElement('div');
+              decoder.innerHTML = html;
+              
+              // Create PDF document with Unicode support
+              const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+                putOnlyUsedFonts: true
+              });
+              
+              // Extract and clean title
+              const title = report.split('\n')[0]
+                .replace(/#/g, '')
+                .trim()
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .replace(/&amp;/g, '&');
+              
+              // Set title
+              pdf.setFontSize(16);
+              pdf.text(title, 15, 15);
+              
+              // Set normal font size for content
+              pdf.setFontSize(11);
+              
+              // Process content
+              const content = decoder.textContent // Get clean text content
+                .split('\n')
+                .map(line => line.trim()) // Trim each line
+                .filter(line => line && !line.startsWith('#')) // Remove empty lines and headers
+                .join('\n\n'); // Add spacing between paragraphs
+              
+              const splitContent = pdf.splitTextToSize(content, 180);
+              
+              let yPosition = 30; // Start after title
+              const lineHeight = 7;
+              
+              // Add content to PDF
+              splitContent.forEach((line: string) => {
+                if (yPosition > 280) {
+                  pdf.addPage();
+                  yPosition = 20;
+                }
+                
+                const cleanLine = line.trim()
+                  .replace(/&quot;/g, '"')
+                  .replace(/&#39;/g, "'")
+                  .replace(/&amp;/g, '&');
+                
+                if (cleanLine) {
+                  pdf.text(cleanLine, 15, yPosition);
+                  yPosition += lineHeight;
+                }
+              });
+              
+              // Add sources section if available
+              const sourcesMatch = report.match(/## Sources\n\n([\s\S]+)$/);
+              if (sourcesMatch) {
+                pdf.addPage();
+                pdf.setFontSize(14);
+                pdf.text('Sources', 15, 20);
+                pdf.setFontSize(10);
+                
+                const sources = sourcesMatch[1]
+                  .split('\n')
+                  .filter(line => line.trim())
+                  .map(line => line.replace(/^- /, '')) // Remove bullet points
+                  .map(line => line
+                    .replace(/&quot;/g, '"')
+                    .replace(/&#39;/g, "'")
+                    .replace(/&amp;/g, '&')
+                  );
+                
+                let sourceY = 30;
+                sources.forEach((source: string) => {
+                  if (sourceY > 280) {
+                    pdf.addPage();
+                    sourceY = 20;
+                  }
+                  pdf.text(source, 15, sourceY);
+                  sourceY += 6;
+                });
+              }
+              
+              // Download PDF
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+              pdf.save(`research-${timestamp}.pdf`);
+            }}
+            className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg shadow-lg hover:bg-green-700 transition-colors duration-150"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download PDF
           </button>
         </div>
       )}
