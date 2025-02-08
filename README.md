@@ -1,6 +1,86 @@
 # Deep Research Web Application
 
-A web-based interface for conducting deep research using AI-powered tools and web crawling capabilities.
+An AI-powered research assistant that helps you conduct comprehensive research on any topic. The application uses advanced AI models and web crawling to gather, analyze, and synthesize information into detailed research reports.
+
+## Features
+
+- 🤖 AI-powered research process
+- 🌐 Intelligent web crawling
+- 📝 Interactive question-answer based research
+- 📊 Real-time progress tracking
+- 📑 Markdown and PDF report generation
+- 📚 Research history management
+- 🌓 Dark mode support
+- 📱 Responsive design
+
+## Tech Stack
+
+- **Frontend**: Next.js, React, TypeScript, TailwindCSS
+- **AI**: OpenAI GPT-4, Marked
+- **Web Crawling**: Firecrawl
+- **PDF Generation**: jsPDF
+- **Styling**: Tailwind CSS with Typography plugin
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 16.x or later
+- npm or yarn
+- OpenAI API key
+- Firecrawl API key
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd deep-research-web
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up environment variables:
+   ```bash
+   cp .env.example .env.local
+   ```
+   Edit `.env.local` and add your API keys:
+   - `NEXT_PUBLIC_FIRECRAWL_KEY`: Your Firecrawl API key
+   - `NEXT_PUBLIC_OPENAI_KEY`: Your OpenAI API key
+   - `NEXT_PUBLIC_OPENAI_MODEL`: OpenAI model to use (default: gpt-4-turbo)
+   - `CONTEXT_SIZE`: Maximum context size for text processing
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+## Usage
+
+1. **Starting Research**:
+   - Enter your research topic
+   - Adjust research breadth (3-10) and depth (1-5)
+   - Click "Start Research"
+
+2. **Answer Questions**:
+   - The AI will generate preliminary questions
+   - Answer them to help focus the research
+   - Submit answers to begin the research process
+
+3. **Research Process**:
+   - Watch real-time progress updates
+   - View recent discoveries as they happen
+   - See sources being analyzed
+
+4. **View Results**:
+   - Read the generated research report
+   - Download in Markdown or PDF format
+   - Access previous reports from the sidebar
 
 ## Project Structure
 
@@ -9,113 +89,53 @@ deep-research-web/
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   └── research/
-│   │   │       └── route.ts       # API endpoint for research operations
-│   │   ├── components/
-│   │   │   ├── ExistingReports.tsx   # Component for displaying existing reports
-│   │   │   ├── ProgressDisplay.tsx    # Component for showing research progress
-│   │   │   └── ResearchForm.tsx       # Form component for research input
-│   │   └── page.tsx               # Main application page
+│   │   │   ├── research/     # Research API endpoints
+│   │   │   └── reports/      # Report management endpoints
+│   │   ├── components/       # React components
+│   │   └── page.tsx         # Main application page
 │   ├── lib/
-│   │   ├── deep-research/
-│   │   │   ├── index.ts           # Core research implementation
-│   │   │   ├── prompts.ts         # AI system prompts
-│   │   │   └── providers.ts       # AI provider configurations
-│   │   └── utils/                 # Utility functions
-└── reports/                       # Directory for storing research reports
+│   │   ├── deep-research/   # Core research logic
+│   │   └── ai/             # AI integration
+├── public/                 # Static assets
+└── reports/               # Generated research reports
 ```
 
-## Core Components
+## Key Components
 
-### Research Implementation (`/lib/deep-research/index.ts`)
-- Implements the core research logic using AI and web crawling
-- Manages research depth and breadth
-- Handles progress tracking and error reporting
-
-### AI Integration (`/lib/deep-research/providers.ts`)
-- Configures OpenAI integration
-- Manages API keys and model settings
-- Implements token management and prompt optimization
-
-### System Prompts (`/lib/deep-research/prompts.ts`)
-- Defines AI system behavior and instructions
-- Contains templates for research queries and analysis
-
-### API Route (`/api/research/route.ts`)
-- Handles research requests and report management
-- Implements file system operations for report storage
-- Provides progress updates and error handling
-
-## Frontend Components
-
-### Main Page (`/app/page.tsx`)
-- Orchestrates the research interface
-- Manages application state and error handling
-- Coordinates between form input and research display
-
-### Research Form (`/components/ResearchForm.tsx`)
-- Handles user input for research parameters
-- Validates input and manages form state
-- Triggers research process
-
-### Progress Display (`/components/ProgressDisplay.tsx`)
-- Shows real-time research progress
-- Displays error messages and status updates
-- Provides visual feedback during research
-
-### Existing Reports (`/components/ExistingReports.tsx`)
-- Lists previously generated research reports
-- Manages report viewing and navigation
-- Displays report metadata
-
-## Getting Started
-
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Set up environment variables:
-   ```
-   OPENAI_API_KEY=your_api_key
-   ```
-
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+- `ResearchForm`: Handles research input and parameters
+- `ProgressDisplay`: Shows real-time research progress
+- `ResultsView`: Displays research results with Markdown rendering
+- `deep-research.ts`: Core research implementation
+- `api/research/route.ts`: Research API endpoint
+- `api/reports/route.ts`: Report management endpoint
 
 ## Development Guidelines
 
-1. **Error Handling**
-   - Implement comprehensive error handling at all levels
-   - Provide clear error messages to users
-   - Log errors appropriately for debugging
-
-2. **Progress Tracking**
-   - Use the progress callback system for real-time updates
-   - Ensure accurate progress reporting
-   - Handle edge cases and failures gracefully
-
-3. **Code Organization**
+1. **Code Organization**:
    - Keep components focused and single-responsibility
    - Use TypeScript for type safety
-   - Document complex logic and important functions
+   - Follow the existing file structure
 
-4. **Performance**
-   - Implement proper token management for AI calls
-   - Optimize web crawling operations
-   - Use appropriate caching strategies
+2. **Styling**:
+   - Use Tailwind CSS classes
+   - Follow dark mode conventions
+   - Maintain responsive design
 
-## Future Improvements
+3. **Error Handling**:
+   - Implement comprehensive error handling
+   - Provide user-friendly error messages
+   - Log errors appropriately
 
-1. Add support for multiple AI providers
-2. Implement advanced research customization options
-3. Add report export functionality
-4. Enhance error recovery mechanisms
-5. Implement user authentication and report sharing
+4. **Performance**:
+   - Optimize API calls
+   - Implement proper caching
+   - Handle large documents efficiently
+
+## API Rate Limits
+
+- Firecrawl: Implement delays between requests
+- OpenAI: Handle token limits and context windows
+- Add appropriate error handling for rate limits
 
 ## Contributing
 
@@ -123,4 +143,15 @@ deep-research-web/
 2. Create your feature branch
 3. Commit your changes
 4. Push to the branch
-5. Create a new Pull Request
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- OpenAI for GPT models
+- Firecrawl for web crawling capabilities
+- Next.js team for the framework
+- TailwindCSS for styling utilities

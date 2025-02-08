@@ -36,6 +36,7 @@ export default function Home() {
   const [errorDetails, setErrorDetails] = useState<ErrorDetails | undefined>();
   const [questions, setQuestions] = useState<ResearchQuestion[]>([]);
   const [answers, setAnswers] = useState<string[]>([]);
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [researchParams, setResearchParams] = useState<{
     query: string;
     breadth: number;
@@ -195,7 +196,7 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
       {/* Sidebar */}
-      <div className="w-80 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+      <div className={`${isSidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden`}>
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Research History</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -252,76 +253,118 @@ export default function Home() {
       </div>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto p-8">
-          <h1 className="text-4xl font-bold text-center text-gray-900 dark:text-gray-100 mb-12">
-            Deep Research Assistant
-          </h1>
+      <main className="flex-1 overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setSidebarOpen(!isSidebarOpen)}
+              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none"
+              aria-label="Toggle sidebar"
+            >
+              <svg
+                className="w-6 h-6 text-gray-600 dark:text-gray-300"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                {isSidebarOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                )}
+              </svg>
+            </button>
+            <a href="/" className="flex items-center space-x-2">
+              <svg
+                className="w-8 h-8 text-indigo-600 dark:text-indigo-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                />
+              </svg>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Deep Research</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400">AI-Powered Research Assistant</p>
+              </div>
+            </a>
+          </div>
+        </div>
 
-          {!isResearching && progress === 0 && !error && !questions.length && !report && (
-            <ResearchForm onSubmit={handleResearchSubmit} />
-          )}
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto p-8">
+            {!isResearching && progress === 0 && !error && !questions.length && !report && (
+              <ResearchForm onSubmit={handleResearchSubmit} />
+            )}
 
-          {questions.length > 0 && (
-            <div className="space-y-6 max-w-2xl mx-auto mb-8">
-              <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden">
-                <div className="p-6">
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                    Please Answer These Questions
-                  </h2>
-                  <form onSubmit={(e) => {
-                    e.preventDefault();
-                    handleAnswerSubmit(answers);
-                  }}>
-                    <div className="space-y-4">
-                      {questions.map((question, index) => (
-                        <div key={index}>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {question.query}
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              {question.researchGoal}
-                            </p>
-                          </label>
-                          <textarea
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600"
-                            rows={3}
-                            value={answers[index] || ''}
-                            onChange={(e) => {
-                              const newAnswers = [...answers];
-                              newAnswers[index] = e.target.value;
-                              setAnswers(newAnswers);
-                            }}
-                            required
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-6">
-                      <button
-                        type="submit"
-                        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                      >
-                        Start Research
-                      </button>
-                    </div>
-                  </form>
+            {questions.length > 0 && (
+              <div className="space-y-6 max-w-2xl mx-auto mb-8">
+                <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden">
+                  <div className="p-6">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                      Please Answer These Questions
+                    </h2>
+                    <form onSubmit={(e) => {
+                      e.preventDefault();
+                      handleAnswerSubmit(answers);
+                    }}>
+                      <div className="space-y-4">
+                        {questions.map((question, index) => (
+                          <div key={index}>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {question.query}
+                              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                {question.researchGoal}
+                              </p>
+                            </label>
+                            <textarea
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600"
+                              rows={3}
+                              value={answers[index] || ''}
+                              onChange={(e) => {
+                                const newAnswers = [...answers];
+                                newAnswers[index] = e.target.value;
+                                setAnswers(newAnswers);
+                              }}
+                              required
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-6">
+                        <button
+                          type="submit"
+                          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                          Start Research
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {(isResearching || progress > 0 || error) && (
-            <ProgressDisplay
-              currentStep={currentStep}
-              progress={progress}
-              learnings={learnings}
-              visitedUrls={visitedUrls}
-              error={error}
-              errorDetails={errorDetails?.details}
-            />
-          )}
+            {(isResearching || progress > 0 || error) && (
+              <ProgressDisplay
+                currentStep={currentStep}
+                progress={progress}
+                learnings={learnings}
+                visitedUrls={visitedUrls}
+                error={error}
+                errorDetails={errorDetails?.details}
+              />
+            )}
 
-          {report && !error && <ResultsView markdown={report} />}
+            {report && !error && <ResultsView markdown={report} />}
+          </div>
         </div>
       </main>
 
