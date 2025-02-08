@@ -40,15 +40,28 @@ export default function ResearchQuestions({ questions, initialQuery, onBack }: R
     setIsSubmitting(true);
 
     try {
-      // Encode the answers properly
-      const encodedAnswers = btoa(encodeURIComponent(JSON.stringify(answers)));
+      // Ensure answers are valid strings and not empty
+      const validAnswers = answers.map(answer => answer.trim()).filter(Boolean);
+      
+      if (validAnswers.length !== questions.length) {
+        throw new Error('Please answer all questions');
+      }
+
+      // First stringify the answers array
+      const answersJson = JSON.stringify(validAnswers);
+      
+      // Then URI encode the JSON string
+      const uriEncoded = encodeURIComponent(answersJson);
+      
+      // Finally convert to base64
+      const base64Encoded = btoa(uriEncoded);
 
       // Encode the research parameters in the URL
       const params = new URLSearchParams({
         query: initialQuery.query,
         breadth: initialQuery.breadth.toString(),
         depth: initialQuery.depth.toString(),
-        answers: encodedAnswers,
+        answers: base64Encoded,
       });
 
       // Navigate to the progress page with the research parameters
@@ -56,6 +69,7 @@ export default function ResearchQuestions({ questions, initialQuery, onBack }: R
     } catch (error) {
       console.error('Error encoding answers:', error);
       setIsSubmitting(false);
+      // You might want to show an error message to the user here
     }
   };
 

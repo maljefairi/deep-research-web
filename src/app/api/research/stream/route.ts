@@ -43,32 +43,60 @@ export async function GET(request: NextRequest) {
       // Decode base64 answers and parse JSON
       let parsedAnswers;
       try {
-        // First, ensure we have a valid base64 string
+        if (!answers) {
+          throw new Error('No answers provided');
+        }
+
+        // Remove any whitespace and quotes that might have been added
         const cleanedAnswers = answers.replace(/\s/g, '').replace(/^["']|["']$/g, '');
         
-        // Decode base64 and URI components
-        const decodedBase64 = atob(cleanedAnswers);
-        const decodedUri = decodeURIComponent(decodedBase64);
+        // First decode from base64
+        let decodedBase64;
+        try {
+          decodedBase64 = atob(cleanedAnswers);
+        } catch (e) {
+          console.error('Base64 decode error:', e);
+          throw new Error('Invalid base64 encoding');
+        }
         
-        // Parse JSON
-        parsedAnswers = JSON.parse(decodedUri);
+        // Then decode URI components
+        let decodedUri;
+        try {
+          decodedUri = decodeURIComponent(decodedBase64);
+        } catch (e) {
+          console.error('URI decode error:', e);
+          throw new Error('Invalid URI encoding');
+        }
         
-        // Validate that we have an array of strings
-        if (!Array.isArray(parsedAnswers) || !parsedAnswers.every(answer => typeof answer === 'string')) {
-          throw new Error('Answers must be an array of strings');
+        // Finally parse JSON
+        try {
+          parsedAnswers = JSON.parse(decodedUri);
+        } catch (e) {
+          console.error('JSON parse error:', e);
+          throw new Error('Invalid JSON format');
+        }
+
+        // Validate the answers array
+        if (!Array.isArray(parsedAnswers)) {
+          throw new Error('Answers must be an array');
+        }
+
+        if (parsedAnswers.length === 0) {
+          throw new Error('No answers provided');
+        }
+
+        if (!parsedAnswers.every(answer => typeof answer === 'string' && answer.trim().length > 0)) {
+          throw new Error('All answers must be non-empty strings');
         }
 
         console.log('Successfully decoded answers:', parsedAnswers);
       } catch (error) {
         console.error('Error parsing answers:', error);
-        if (error instanceof Error) {
-          if (error.message.includes('URI')) {
-            throw new Error('Invalid encoding format - Please try submitting the form again');
-          } else if (error.message.includes('JSON')) {
-            throw new Error('Invalid answer format - The answers could not be processed');
-          }
-        }
-        throw new Error('Invalid answers format - Please check your input and try again');
+        throw new Error(
+          error instanceof Error 
+            ? `Invalid answers format - ${error.message}` 
+            : 'Invalid answers format - Please check your input and try again'
+        );
       }
 
       // Generate research plan
