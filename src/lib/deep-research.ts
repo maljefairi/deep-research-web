@@ -1,7 +1,6 @@
-import FirecrawlApp, { SearchResponse } from '@mendable/firecrawl-js';
+import FirecrawlApp, { SearchResponse, FirecrawlDocument } from '@mendable/firecrawl-js';
 import { generateObject } from 'ai';
 import { compact } from 'lodash-es';
-import pLimit from 'p-limit';
 import { z } from 'zod';
 
 import { o3MiniModel, trimPrompt } from './ai/providers';
@@ -12,22 +11,7 @@ type ResearchResult = {
   visitedUrls: string[];
 };
 
-type ResearchState = {
-  status: 'initial' | 'questions' | 'researching' | 'complete' | 'error';
-  questions?: {
-    query: string;
-    researchGoal: string;
-  }[];
-  answers?: string[];
-  progress: number;
-  step: string;
-  learnings: string[];
-  visitedUrls: string[];
-  error?: string;
-};
-
 // Increase delay between requests to avoid rate limits
-const ConcurrencyLimit = 1;
 const InitialRequestDelay = 5000; // 5 seconds initial delay
 const MaxRequestDelay = 60000; // Maximum 60 seconds delay
 const BackoffFactor = 1.5; // Exponential backoff factor
@@ -38,13 +22,17 @@ const MaxRetries = 2;
 // Maximum content length to avoid token limits
 const MaxContentLength = 8000;
 
-// Add maximum limits to prevent infinite loops
-const MAX_TOTAL_QUERIES = 15;
-const MAX_DEPTH_ITERATIONS = 3;
-const MAX_RETRIES = 3;
-
 // Helper function to delay between requests with exponential backoff
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+interface RateLimitError {
+  statusCode: number;
+  response?: {
+    headers: {
+      'retry-after'?: string;
+    };
+  };
+}
 
 // Helper function to handle rate-limited requests with exponential backoff
 async function retryWithDelay<T>(
@@ -54,10 +42,15 @@ async function retryWithDelay<T>(
 ): Promise<T> {
   try {
     return await fn();
-  } catch (error: any) {
-    if (error?.statusCode === 429 && retries > 0) {
+  } catch (error) {
+    if (error && 
+        typeof error === 'object' && 
+        'statusCode' in error && 
+        (error as RateLimitError).statusCode === 429 && 
+        retries > 0) {
       // Get retry delay from response headers if available
-      const retryAfter = error.response?.headers?.['retry-after'];
+      const rateLimitError = error as RateLimitError;
+      const retryAfter = rateLimitError.response?.headers?.['retry-after'];
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : delayMs;
       
       console.log(`Rate limited, waiting ${waitTime/1000}s before retry... (${retries} retries left)`);
@@ -70,12 +63,6 @@ async function retryWithDelay<T>(
     }
     throw error;
   }
-}
-
-// Helper function to truncate content
-function truncateContent(content: string, maxLength: number): string {
-  if (content.length <= maxLength) return content;
-  return content.slice(0, maxLength) + '...';
 }
 
 // Initialize Firecrawl with API key
@@ -125,50 +112,6 @@ Generate questions that will help refine and focus the research. Each question s
   }));
 }
 
-// take user query and answers, return a list of SERP queries
-async function generateSerpQueries({
-  query,
-  answers,
-  numQueries = 3,
-  learnings,
-}: {
-  query: string;
-  answers: string[];
-  numQueries?: number;
-  learnings?: string[];
-}) {
-  console.log('Generating SERP queries for:', query);
-  const res = await generateObject({
-    model: o3MiniModel,
-    system: systemPrompt(),
-    prompt: `Given the following research topic and answers to preliminary questions, generate a list of SERP queries to research the topic. Return a maximum of ${numQueries} queries, but feel free to return less if the original prompt is clear. Make sure each query is unique and not similar to each other.
-
-Topic: <topic>${query}</topic>
-
-Preliminary Answers:
-${answers.map((answer, i) => `${i + 1}. ${answer}`).join('\n')}
-
-${learnings ? `Previous Learnings:\n${learnings.join('\n')}` : ''}`,
-    schema: z.object({
-      queries: z
-        .array(
-          z.object({
-            query: z.string().describe('The SERP query'),
-            researchGoal: z
-              .string()
-              .describe(
-                'First talk about the goal of the research that this query is meant to accomplish, then go deeper into how to advance the research once the results are found, mention additional research directions. Be as specific as possible, especially for additional research directions.',
-              ),
-          }),
-        )
-        .describe(`List of SERP queries, max of ${numQueries}`),
-    }),
-  });
-
-  console.log('Generated queries:', res.object.queries);
-  return res.object.queries.slice(0, numQueries);
-}
-
 // Track research progress
 interface ResearchProgress {
   learnings: string[];
@@ -180,17 +123,15 @@ interface ResearchProgress {
 async function processSerpResult({
   query,
   result,
-  numFollowUpQuestions,
 }: {
   query: string;
   result: SearchResponse;
-  numFollowUpQuestions: number;
 }) {
   console.log('Processing SERP results for query:', query);
   
-  // Truncate and combine content to avoid token limits
+  // Ensure content exists in FirecrawlDocument
   const combinedContent = result.data
-    .map(item => item.content)
+    .map(item => (item as FirecrawlDocument & { content: string }).content)
     .join('\n\n')
     .slice(0, MaxContentLength);
 
@@ -210,7 +151,7 @@ ${combinedContent}
           .describe('Key learnings extracted from the search results'),
         followUpQuestions: z
           .array(z.string())
-          .max(1) // Limit to 1 follow-up question to prevent exponential growth
+          .max(1)
           .describe('Follow-up questions for deeper research'),
       }),
     });
@@ -282,51 +223,106 @@ export async function generateResearchPlan({
   answers: string[];
 }): Promise<ResearchPlan> {
   console.log('Generating research plan for:', query);
-  const res = await generateObject({
-    model: o3MiniModel,
-    system: systemPrompt(),
-    prompt: `Given the research topic and preliminary answers, create a detailed research plan with a table of contents. The plan should be comprehensive and well-structured.
+  try {
+    const res = await generateObject({
+      model: o3MiniModel,
+      system: systemPrompt(),
+      prompt: `Given the research topic and preliminary answers, create a detailed research plan with a table of contents. The plan should be comprehensive and well-structured.
 
 Topic: <topic>${query}</topic>
 
 Preliminary Answers:
 ${answers.map((answer, i) => `${i + 1}. ${answer}`).join('\n')}
 
-Create a research plan that:
-1. Has a clear structure with main sections and subsections
-2. Includes specific research queries for each section
-3. Provides estimated optimal research depth (1-5) and breadth (3-10)
-4. Ensures comprehensive coverage of the topic
+Create a research plan that includes:
+1. A clear title for the research
+2. Main sections with specific headings
+3. Relevant subheadings for each section
+4. Specific research queries for each section
+5. Estimated research depth (1-5) where 1 is surface level and 5 is very detailed
+6. Estimated research breadth (3-10) where 3 is focused and 10 is comprehensive
 
-Note: The depth should be between 1-5 (where 1 is surface level and 5 is very detailed),
-and breadth should be between 3-10 (where 3 is focused and 10 is comprehensive).
-These estimates should be based on the complexity and scope of the research topic.`,
-    schema: z.object({
-      tableOfContents: z.object({
-        title: z.string(),
-        sections: z.array(z.object({
-          heading: z.string(),
-          subheadings: z.array(z.string()),
-          researchQueries: z.array(z.string()).describe('Specific search queries to research this section'),
-        })),
-      }),
-      estimatedDepth: z.number().min(1).max(5).describe('Estimated optimal research depth (1-5)'),
-      estimatedBreadth: z.number().min(3).max(10).describe('Estimated optimal research breadth (3-10)'),
-    }),
-  });
+IMPORTANT: You must include both estimatedDepth and estimatedBreadth as numbers in your response.
+The depth should be between 1-5 and breadth between 3-10.
 
-  // Validate the response
-  if (!res.object.estimatedDepth || !res.object.estimatedBreadth) {
-    throw new Error('Invalid research plan: missing depth or breadth estimates');
+Format your response exactly as follows:
+{
+  "tableOfContents": {
+    "title": "Your Title Here",
+    "sections": [
+      {
+        "heading": "Section Heading",
+        "subheadings": ["Subheading 1", "Subheading 2"],
+        "researchQueries": ["Query 1", "Query 2"]
+      }
+    ]
+  },
+  "estimatedDepth": 3,
+  "estimatedBreadth": 6
+}`,
+      schema: z.object({
+        tableOfContents: z.object({
+          title: z.string(),
+          sections: z.array(z.object({
+            heading: z.string(),
+            subheadings: z.array(z.string()),
+            researchQueries: z.array(z.string()),
+          })),
+        }).strict(),
+        estimatedDepth: z.number().int().min(1).max(5),
+        estimatedBreadth: z.number().int().min(3).max(10),
+      }).strict(),
+    });
+
+    // Validate the response structure
+    if (!res.object.tableOfContents || !Array.isArray(res.object.tableOfContents.sections)) {
+      throw new Error('Invalid research plan structure');
+    }
+
+    // Validate depth and breadth
+    if (typeof res.object.estimatedDepth !== 'number' || typeof res.object.estimatedBreadth !== 'number') {
+      console.warn('Missing depth or breadth, using defaults');
+      return {
+        ...res.object,
+        estimatedDepth: res.object.estimatedDepth || 3,
+        estimatedBreadth: res.object.estimatedBreadth || 6,
+      };
+    }
+
+    return res.object;
+  } catch (error) {
+    console.error('Research plan generation error:', error);
+    // Provide a fallback research plan
+    return {
+      tableOfContents: {
+        title: `Research Plan: ${query}`,
+        sections: [
+          {
+            heading: 'Introduction',
+            subheadings: ['Overview', 'Background'],
+            researchQueries: [`What is ${query}?`, `Current state of ${query}`],
+          },
+          {
+            heading: 'Main Analysis',
+            subheadings: ['Key Aspects', 'Findings'],
+            researchQueries: [`Analysis of ${query}`, `Key findings about ${query}`],
+          },
+          {
+            heading: 'Conclusion',
+            subheadings: ['Summary', 'Recommendations'],
+            researchQueries: [`Summary of ${query}`, `Recommendations regarding ${query}`],
+          },
+        ],
+      },
+      estimatedDepth: 3,
+      estimatedBreadth: 6,
+    };
   }
-
-  return res.object;
 }
 
 // Modify the deepResearch function to handle sections sequentially
 export async function deepResearch({
   query,
-  answers,
   breadth,
   depth,
   researchPlan,
@@ -335,7 +331,7 @@ export async function deepResearch({
   onProgress,
 }: {
   query: string;
-  answers: string[];
+  answers?: string[];
   breadth: number;
   depth: number;
   researchPlan: ResearchPlan;
@@ -352,7 +348,8 @@ export async function deepResearch({
     const results = [];
     
     // Process sections sequentially to avoid rate limits
-    for (const [sectionIndex, section] of researchPlan.tableOfContents.sections.entries()) {
+    for (let i = 0; i < researchPlan.tableOfContents.sections.length; i++) {
+      const section = researchPlan.tableOfContents.sections[i];
       onProgress?.(
         currentProgress,
         `Researching section: ${section.heading}`
@@ -376,7 +373,6 @@ export async function deepResearch({
           const newLearnings = await processSerpResult({
             query,
             result,
-            numFollowUpQuestions: 1,
           });
 
           results.push({
@@ -390,7 +386,7 @@ export async function deepResearch({
       }
 
       // Update progress after each section
-      currentProgress = ((sectionIndex + 1) / totalSections) * 100;
+      currentProgress = ((i + 1) / totalSections) * 100;
       onProgress?.(
         currentProgress,
         `Completed section: ${section.heading}`
@@ -399,14 +395,14 @@ export async function deepResearch({
 
     // Combine all results
     const finalResults = {
-      learnings: [
+      learnings: Array.from(new Set([
         ...learnings,
-        ...new Set(results.flatMap(result => result.learnings)),
-      ],
-      visitedUrls: [
+        ...results.flatMap(result => result.learnings)
+      ])),
+      visitedUrls: Array.from(new Set([
         ...visitedUrls,
-        ...new Set(results.flatMap(result => result.visitedUrls)),
-      ],
+        ...results.flatMap(result => result.visitedUrls)
+      ])),
     };
 
     console.log('Research complete with:', {
