@@ -1,15 +1,43 @@
-import OpenAI from "openai";
+import { openai, defaultModelConfig } from './ai/providers';
+import { z } from 'zod';
 
-const openai = new OpenAI({ apiKey: process.env.NEXT_PUBLIC_OPENAI_KEY });
+// Define input validation schema
+const promptSchema = z.string().min(1, 'Prompt cannot be empty').max(4000, 'Prompt too long');
 
-export async function optimizeWorkflow(userPrompt: string) {
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "Kamu adalah asisten penelitian AI yang membantu mengoptimalkan alur kerja penelitian." },
-      { role: "user", content: userPrompt }
-    ]
-  });
+// Define response type
+interface OptimizationResult {
+  suggestion: string;
+  error?: string;
+}
 
-  return response.choices[0].message.content;
+export async function optimizeWorkflow(userPrompt: string): Promise<OptimizationResult> {
+  try {
+    // Validate input
+    const validatedPrompt = promptSchema.parse(userPrompt);
+
+    const response = await openai.chat.completions.create({
+      ...defaultModelConfig,
+      messages: [
+        { 
+          role: "system", 
+          content: "You are an AI research assistant helping to optimize research workflows. Provide clear, actionable suggestions for improving research efficiency." 
+        },
+        { role: "user", content: validatedPrompt }
+      ]
+    });
+
+    if (!response.choices?.[0]?.message?.content) {
+      throw new Error('Invalid response from AI service');
+    }
+
+    return {
+      suggestion: response.choices[0].message.content
+    };
+  } catch (error) {
+    console.error('Workflow optimization error:', error);
+    return {
+      suggestion: '',
+      error: error instanceof Error ? error.message : 'Failed to optimize workflow'
+    };
+  }
 }

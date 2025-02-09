@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { o3MiniModel, trimPrompt } from './ai/providers';
 import { systemPrompt } from './prompt';
+import { config } from './config';
 
 type ResearchResult = {
   learnings: string[];
@@ -65,10 +66,10 @@ async function retryWithDelay<T>(
   }
 }
 
-// Initialize Firecrawl with API key
+// Initialize Firecrawl client with validated configuration
 const firecrawl = new FirecrawlApp({
-  apiKey: process.env.NEXT_PUBLIC_FIRECRAWL_KEY ?? '',
-  apiUrl: process.env.NEXT_PUBLIC_FIRECRAWL_BASE_URL,
+  apiKey: config.firecrawl.apiKey,
+  apiUrl: config.firecrawl.baseUrl,
 });
 
 // Generate initial research questions
@@ -120,48 +121,85 @@ interface ResearchProgress {
   depthIterations: number;
 }
 
+// Add proper type definitions at the top of the file
+interface FirecrawlSearchResult {
+  title?: string | undefined;
+  content?: string | undefined;
+  url?: string | undefined;
+}
+
+interface SerpProcessResult {
+  learnings: string[];
+  followUpQuestions: string[];
+  visitedUrls: string[];
+}
+
 async function processSerpResult({
   query,
   result,
 }: {
   query: string;
-  result: SearchResponse;
-}) {
+  result: { data: FirecrawlSearchResult[] };
+}): Promise<SerpProcessResult> {
   console.log('Processing SERP results for query:', query);
   
-  // Ensure content exists in FirecrawlDocument
-  const combinedContent = result.data
-    .map(item => (item as FirecrawlDocument & { content: string }).content)
-    .join('\n\n')
-    .slice(0, MaxContentLength);
-
   try {
+    // Extract and validate the data we need
+    const searchResults = result.data
+      .filter(Boolean)
+      .map(item => ({
+        title: String(item?.title || ''),
+        content: String(item?.content || ''),
+        url: String(item?.url || ''),
+      }))
+      .filter(item => 
+        item.content.trim().length > 0 && 
+        item.title.trim().length > 0 && 
+        item.url.trim().length > 0
+      );
+
+    if (searchResults.length === 0) {
+      console.log('No valid search results found for query:', query);
+      return {
+        learnings: [],
+        followUpQuestions: [],
+        visitedUrls: [],
+      };
+    }
+
     const res = await generateObject({
       model: o3MiniModel,
-      abortSignal: AbortSignal.timeout(60_000),
       system: systemPrompt(),
-      prompt: `Given the following search results, extract key learnings and generate follow-up questions for deeper research. Format the content as bullet points and be concise:
+      prompt: `Please analyze these search results about "${query}" and extract key learnings and follow-up questions. Provide your response in English only.
 
-<content>
-${combinedContent}
-</content>`,
+${searchResults.map(item => `
+Title: ${item.title}
+Content: ${item.content}
+URL: ${item.url}
+`).join('\n')}
+
+Please format your response in English with:
+1. Key learnings as bullet points
+2. Follow-up questions to explore further
+
+Note: Ensure all responses are in clear, professional English.`,
       schema: z.object({
-        learnings: z
-          .array(z.string())
-          .describe('Key learnings extracted from the search results'),
-        followUpQuestions: z
-          .array(z.string())
-          .max(1)
-          .describe('Follow-up questions for deeper research'),
+        learnings: z.array(z.string()),
+        followUpQuestions: z.array(z.string()),
       }),
     });
 
-    return res.object;
+    return {
+      learnings: res.object.learnings,
+      followUpQuestions: res.object.followUpQuestions,
+      visitedUrls: searchResults.map(item => item.url),
+    };
   } catch (error) {
     console.error(`Error processing SERP result for query "${query}":`, error);
     return {
       learnings: [],
       followUpQuestions: [],
+      visitedUrls: [],
     };
   }
 }
@@ -186,15 +224,31 @@ export async function writeFinalReport({
   const res = await generateObject({
     model: o3MiniModel,
     system: systemPrompt(),
-    prompt: `Given the following prompt from the user, write a final report on the topic using the learnings from research. Make it as as detailed as possible, aim for 3 or more pages, include ALL the learnings from research:\n\n<prompt>${prompt}</prompt>\n\nHere are all the learnings from previous research:\n\n<learnings>\n${learningsString}\n</learnings>`,
+    prompt: `Please write a comprehensive final report in English based on the following user prompt and research findings. The report should be detailed, professional, and academically rigorous.
+
+User's prompt:
+<prompt>${prompt}</prompt>
+
+Research findings:
+<learnings>${learningsString}</learnings>
+
+Requirements:
+1. Write the report in clear, professional English
+2. Make it as detailed as possible (aim for 3 or more pages)
+3. Include ALL the relevant learnings from the research
+4. Use proper academic English formatting and structure
+5. Ensure all technical terms are properly explained
+6. Include section headings and subheadings for better organization
+
+Please provide the report in Markdown format.`,
     schema: z.object({
       reportMarkdown: z
         .string()
-        .describe('Final report on the topic in Markdown'),
+        .describe('Final report in English using Markdown format'),
     }),
   });
 
-  // Append the visited URLs section to the report
+  // Append the sources section
   const urlsSection = `\n\n## Sources\n\n${visitedUrls.map(url => `- ${url}`).join('\n')}`;
   const finalReport = res.object.reportMarkdown + urlsSection;
   console.log('Final report generated with', visitedUrls.length, 'sources');
@@ -339,121 +393,78 @@ export async function deepResearch({
   visitedUrls?: string[];
   onProgress?: (progress: number, step: string) => void;
 }): Promise<ResearchResult> {
-  try {
-    console.log('Starting deep research with plan:', { query, breadth, depth });
-    
-    const totalSections = researchPlan.tableOfContents.sections.length;
-    let currentProgress = 0;
-    
-    const results = [];
-    
-    // Process sections sequentially to avoid rate limits
-    for (let i = 0; i < researchPlan.tableOfContents.sections.length; i++) {
-      const section = researchPlan.tableOfContents.sections[i];
-      const sectionProgress = (i / totalSections) * 100;
-      
-      onProgress?.(
-        sectionProgress,
-        `Researching section: ${section.heading}`
-      );
+  console.log('Starting deep research with plan:', { query, breadth, depth });
+  
+  // Add a Set to track processed queries
+  const processedQueries = new Set<string>();
 
-      // Process queries for this section sequentially
-      for (const query of section.researchQueries) {
+  // Track total queries for progress calculation
+  const totalQueries = researchPlan.tableOfContents.sections.reduce(
+    (acc, section) => acc + section.researchQueries.length,
+    0
+  );
+  let completedQueries = 0;
+
+  const updateProgress = (section: { heading: string }) => {
+    completedQueries++;
+    if (onProgress) {
+      const progress = Math.round((completedQueries / totalQueries) * 100);
+      onProgress(progress, `Researching: ${section.heading}`);
+    }
+  };
+
+  try {
+    for (const section of researchPlan.tableOfContents.sections) {
+      for (const researchQuery of section.researchQueries) {
+        // Skip if we've already processed this query
+        if (processedQueries.has(researchQuery)) {
+          updateProgress(section);
+          continue;
+        }
+
+        // Add query to processed set
+        processedQueries.add(researchQuery);
+
+        console.log('Processing SERP results for query:', researchQuery);
+        
         try {
-          // Add delay between queries
+          // Add delay between queries to respect rate limits
           await delay(InitialRequestDelay);
-          
-          const result = await retryWithDelay(() => 
-            firecrawl.search(query, {
+
+          const result = await retryWithDelay(() =>
+            firecrawl.search(researchQuery, {
               timeout: 30000,
               limit: Math.max(3, Math.ceil(breadth / 2)), // Adjust limit based on breadth
               scrapeOptions: { formats: ['markdown'] },
-            })
+            }) as Promise<{ data: FirecrawlSearchResult[] }>
           );
 
-          const newUrls = compact(result.data.map(item => item.url));
-          const processedResults = await processSerpResult({
-            query,
+          const processed = await processSerpResult({
+            query: researchQuery,
             result,
           });
 
-          // For deeper research on each query result
-          if (depth > 1) {
-            const followUpResults = await Promise.all(
-              processedResults.followUpQuestions.slice(0, Math.ceil(breadth / 3)).map(async followUpQuery => {
-                await delay(InitialRequestDelay);
-                return retryWithDelay(() =>
-                  firecrawl.search(followUpQuery, {
-                    timeout: 30000,
-                    limit: Math.max(2, Math.ceil(breadth / 3)),
-                    scrapeOptions: { formats: ['markdown'] },
-                  })
-                );
-              })
-            );
+          learnings.push(...processed.learnings);
+          visitedUrls.push(...processed.visitedUrls);
 
-            // Process follow-up results
-            const deeperResults = await Promise.all(
-              followUpResults.map(result =>
-                processSerpResult({
-                  query: query,
-                  result,
-                })
-              )
-            );
-
-            results.push({
-              learnings: [
-                ...processedResults.learnings,
-                ...deeperResults.flatMap(r => r.learnings),
-              ],
-              visitedUrls: [
-                ...newUrls,
-                ...followUpResults.flatMap(r => 
-                  compact(r.data.map(item => item.url))
-                ),
-              ],
-            });
-          } else {
-            results.push({
-              learnings: processedResults.learnings,
-              visitedUrls: newUrls,
-            });
-          }
-
+          updateProgress(section);
         } catch (error) {
-          console.error(`Error processing query "${query}":`, error);
-          // Continue with next query even if this one fails
+          console.error(`Error processing query "${researchQuery}":`, error);
+          // Continue with next query if this one fails, but mark it as completed
+          updateProgress(section);
+          // Only throw if it's a critical error (like rate limits)
+          if (error && typeof error === 'object' && 'statusCode' in error) {
+            throw error;
+          }
         }
       }
-
-      // Update progress after each section
-      const completedProgress = ((i + 1) / totalSections) * 100;
-      onProgress?.(
-        completedProgress,
-        `Completed section: ${section.heading}`
-      );
     }
 
-    // Combine all results
-    const finalResults = {
-      learnings: Array.from(new Set([
-        ...learnings,
-        ...results.flatMap(result => result.learnings)
-      ])),
-      visitedUrls: Array.from(new Set([
-        ...visitedUrls,
-        ...results.flatMap(result => result.visitedUrls)
-      ])),
+    // Remove duplicates from results
+    return {
+      learnings: Array.from(new Set(learnings)),
+      visitedUrls: Array.from(new Set(visitedUrls)),
     };
-
-    console.log('Research complete with:', {
-      totalLearnings: finalResults.learnings.length,
-      totalUrls: finalResults.visitedUrls.length,
-      totalSections: totalSections,
-    });
-
-    return finalResults;
   } catch (error) {
     console.error('Deep research failed:', error);
     throw error;

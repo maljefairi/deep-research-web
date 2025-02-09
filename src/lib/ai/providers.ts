@@ -1,12 +1,28 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import OpenAI from 'openai';
+import { config } from '../config';
 import { getEncoding } from 'js-tiktoken';
 import { RecursiveCharacterTextSplitter } from './text-splitter';
 
-// Providers
-const openai = createOpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_KEY!,
-  baseURL: process.env.NEXT_PUBLIC_OPENAI_ENDPOINT || 'https://api.openai.com/v1',
+// Create OpenAI client with validated configuration
+export const openai = new OpenAI({
+  apiKey: config.openai.apiKey,
+  baseURL: config.openai.endpoint,
 });
+
+// Default model configuration
+export const defaultModelConfig = {
+  model: config.openai.model,
+  temperature: 0.7,
+  max_tokens: 2000,
+  top_p: 1,
+  frequency_penalty: 0,
+  presence_penalty: 0,
+  // Use validated context size from config
+  contextSize: config.app.contextSize,
+} as const;
+
+// Export type for model configuration
+export type ModelConfig = typeof defaultModelConfig;
 
 // Models - Using gpt-4o-mini as it's the most widely supported model
 export const o3MiniModel = openai('gpt-4o-mini');
