@@ -16,6 +16,7 @@ interface ExistingReportsProps {
   selectedReport: Report | null;
   onSelect: (report: Report) => void;
   isOpen: boolean;
+  isLoading?: boolean;
 }
 
 export default function ExistingReports({ 
@@ -23,7 +24,8 @@ export default function ExistingReports({
   onDelete, 
   selectedReport,
   onSelect,
-  isOpen 
+  isOpen,
+  isLoading = false
 }: ExistingReportsProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -48,14 +50,55 @@ export default function ExistingReports({
             Research History
           </h2>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {reports.length} {reports.length === 1 ? 'report' : 'reports'} available
+            {isLoading ? 'Loading reports...' : `${reports.length} ${reports.length === 1 ? 'report' : 'reports'} available`}
           </p>
         </div>
         
         <div className="flex-1 overflow-y-auto">
-          {reports.length === 0 ? (
-            <div className="p-4 text-center">
-              <p className="text-gray-500 dark:text-gray-400">No previous research found</p>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+            </div>
+          ) : reports.length === 0 ? (
+            <div className="p-8 text-center">
+              <svg 
+                className="mx-auto h-12 w-12 text-gray-400" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" 
+                />
+              </svg>
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No reports yet</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Start your first research to see reports here
+              </p>
+              <div className="mt-6">
+                <Link
+                  href="/"
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  <svg 
+                    className="-ml-1 mr-2 h-5 w-5" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M12 4v16m8-8H4" 
+                    />
+                  </svg>
+                  New Research
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="space-y-1 p-2">

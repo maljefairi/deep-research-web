@@ -21,7 +21,7 @@ interface ResearchProgress {
   step: string;
   learnings: string[];
   visitedUrls: string[];
-  logs: string[];
+  logs: { id: string; message: string }[];
   report?: string;
   error?: string;
   title?: string;
@@ -114,7 +114,7 @@ export default function ProgressPage() {
           if (error instanceof Error) {
             setState(prev => ({
               ...prev,
-              logs: [...prev.logs, `Error saving report: ${error.message}`],
+              logs: [...prev.logs, { id: crypto.randomUUID(), message: `Error saving report: ${error.message}` }],
             }));
           }
         } finally {
@@ -127,65 +127,80 @@ export default function ProgressPage() {
   }, [state.report, state.isSaving]);
 
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const eventSource = new EventSource(
-      `/api/research/stream?${searchParams.toString()}`
-    );
+    let eventSource: EventSource | null = null;
+    
+    // Only create a new connection if we don't have an active one
+    if (!eventSource) {
+      const searchParams = new URLSearchParams(window.location.search);
+      eventSource = new EventSource(
+        `/api/research/stream?${searchParams.toString()}`
+      );
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        if (data.error) {
-          setError(data.error);
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.error) {
+            setError(data.error);
+            setState(prev => ({
+              ...prev,
+              status: 'error',
+              step: 'Error occurred',
+              logs: [...prev.logs, { id: crypto.randomUUID(), message: `Error: ${data.error}` }],
+            }));
+            eventSource?.close();
+            return;
+          }
+
           setState(prev => ({
             ...prev,
-            status: 'error',
-            step: 'Error occurred',
-            logs: [...prev.logs, `Error: ${data.error}`],
+            status: data.report ? 'complete' : 'researching',
+            progress: data.progress || prev.progress,
+            step: data.step || prev.step,
+            logs: [
+              ...prev.logs,
+              ...(data.logs || []).map((log: string) => ({
+                id: crypto.randomUUID(),
+                message: log,
+              })),
+            ],
+            learnings: data.learnings || prev.learnings,
+            visitedUrls: data.visitedUrls || prev.visitedUrls,
+            report: data.report,
+            reportMeta: data.reportMeta,
+            researchPlan: data.researchPlan || prev.researchPlan,
           }));
-          eventSource.close();
-          return;
-        }
 
+          if (data.report) {
+            eventSource?.close();
+          }
+        } catch (error) {
+          console.error('Error parsing event data:', error);
+          setError('Error processing research data');
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        setError('Connection error occurred');
         setState(prev => ({
           ...prev,
-          status: data.report ? 'complete' : 'researching',
-          progress: data.progress || prev.progress,
-          step: data.step || prev.step,
-          logs: [...prev.logs, ...(data.logs || [])],
-          learnings: data.learnings || prev.learnings,
-          visitedUrls: data.visitedUrls || prev.visitedUrls,
-          report: data.report,
-          reportMeta: data.reportMeta,
-          researchPlan: data.researchPlan || prev.researchPlan,
+          status: 'error',
+          step: 'Connection error',
+          logs: [...prev.logs, { id: crypto.randomUUID(), message: 'Connection error occurred' }],
         }));
+        eventSource?.close();
+      };
+    }
 
-        if (data.report) {
-          eventSource.close();
-        }
-      } catch (error) {
-        console.error('Error parsing event data:', error);
-        setError('Error processing research data');
+    // Cleanup function to close the connection when component unmounts
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
       }
     };
-
-    eventSource.onerror = (error) => {
-      console.error('EventSource error:', error);
-      setError('Connection error occurred');
-      setState(prev => ({
-        ...prev,
-        status: 'error',
-        step: 'Connection error',
-        logs: [...prev.logs, 'Connection error occurred'],
-      }));
-      eventSource.close();
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, []);
+  }, []); // Empty dependency array since we only want to create the connection once
 
   const handleDeleteReport = async (reportId: string) => {
     try {
@@ -267,9 +282,27 @@ export default function ProgressPage() {
                   )}
                 </svg>
               </button>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                Research Progress
-              </h1>
+              <Link 
+                href="/"
+                className="flex items-center space-x-2 cursor-pointer group"
+              >
+                <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  Research Assistant
+                </h1>
+                <svg 
+                  className="h-5 w-5 text-gray-400 group-hover:text-indigo-500 transition-colors" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" 
+                  />
+                </svg>
+              </Link>
             </div>
           </div>
         </div>

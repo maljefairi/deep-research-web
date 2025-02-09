@@ -31,9 +31,13 @@ export default function Home() {
   } | null>(null);
   const [questions, setQuestions] = useState<ResearchQuestion[]>([]);
 
+  // Add loading state for reports
+  const [isLoadingReports, setIsLoadingReports] = useState(true);
+
   // Add useEffect to fetch reports on page load
   useEffect(() => {
     const fetchReports = async () => {
+      setIsLoadingReports(true);
       try {
         const response = await fetch('/api/research');
         if (!response.ok) {
@@ -43,11 +47,14 @@ export default function Home() {
         setReports(data);
       } catch (error) {
         console.error('Error fetching reports:', error);
+        alert('Failed to load previous research reports. Please try refreshing the page.');
+      } finally {
+        setIsLoadingReports(false);
       }
     };
 
     fetchReports();
-  }, []);
+  }, []); // Empty dependency array means this runs once on mount
 
   const handleInitialSubmit = async (data: { query: string; breadth: number; depth: number }) => {
     setCurrentQuery(data);
@@ -82,6 +89,7 @@ export default function Home() {
 
   const handleDeleteReport = async (reportId: string) => {
     try {
+      setIsLoadingReports(true);
       const response = await fetch(`/api/reports/${reportId}`, {
         method: 'DELETE',
       });
@@ -90,8 +98,13 @@ export default function Home() {
         throw new Error('Failed to delete report');
       }
 
-      // Remove the report from the state
-      setReports(reports.filter(r => r.id !== reportId));
+      // Refetch reports to ensure we have the latest data
+      const reportsResponse = await fetch('/api/research');
+      if (!reportsResponse.ok) {
+        throw new Error('Failed to refresh reports');
+      }
+      const updatedReports = await reportsResponse.json();
+      setReports(updatedReports);
       
       // If the deleted report was selected, clear the selection
       if (selectedReport?.id === reportId) {
@@ -99,6 +112,9 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error deleting report:', error);
+      alert('Failed to delete report. Please try again.');
+    } finally {
+      setIsLoadingReports(false);
     }
   };
 
@@ -146,13 +162,16 @@ export default function Home() {
       </header>
 
       {/* Sidebar */}
-      <ExistingReports
-        reports={reports}
-        onDelete={handleDeleteReport}
-        selectedReport={selectedReport}
-        onSelect={setSelectedReport}
-        isOpen={isSidebarOpen}
-      />
+      {isSidebarOpen && (
+        <ExistingReports
+          reports={reports}
+          onDelete={handleDeleteReport}
+          selectedReport={selectedReport}
+          onSelect={setSelectedReport}
+          isOpen={isSidebarOpen}
+          isLoading={isLoadingReports}
+        />
+      )}
 
       {/* Main Content */}
       <main className={`min-h-screen pt-16 transition-all duration-300 ${

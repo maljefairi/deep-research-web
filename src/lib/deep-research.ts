@@ -350,8 +350,10 @@ export async function deepResearch({
     // Process sections sequentially to avoid rate limits
     for (let i = 0; i < researchPlan.tableOfContents.sections.length; i++) {
       const section = researchPlan.tableOfContents.sections[i];
+      const sectionProgress = (i / totalSections) * 100;
+      
       onProgress?.(
-        currentProgress,
+        sectionProgress,
         `Researching section: ${section.heading}`
       );
 
@@ -364,21 +366,61 @@ export async function deepResearch({
           const result = await retryWithDelay(() => 
             firecrawl.search(query, {
               timeout: 30000,
-              limit: 3,
+              limit: Math.max(3, Math.ceil(breadth / 2)), // Adjust limit based on breadth
               scrapeOptions: { formats: ['markdown'] },
             })
           );
 
           const newUrls = compact(result.data.map(item => item.url));
-          const newLearnings = await processSerpResult({
+          const processedResults = await processSerpResult({
             query,
             result,
           });
 
-          results.push({
-            learnings: newLearnings.learnings,
-            visitedUrls: newUrls,
-          });
+          // For deeper research on each query result
+          if (depth > 1) {
+            const followUpResults = await Promise.all(
+              processedResults.followUpQuestions.slice(0, Math.ceil(breadth / 3)).map(async followUpQuery => {
+                await delay(InitialRequestDelay);
+                return retryWithDelay(() =>
+                  firecrawl.search(followUpQuery, {
+                    timeout: 30000,
+                    limit: Math.max(2, Math.ceil(breadth / 3)),
+                    scrapeOptions: { formats: ['markdown'] },
+                  })
+                );
+              })
+            );
+
+            // Process follow-up results
+            const deeperResults = await Promise.all(
+              followUpResults.map(result =>
+                processSerpResult({
+                  query: query,
+                  result,
+                })
+              )
+            );
+
+            results.push({
+              learnings: [
+                ...processedResults.learnings,
+                ...deeperResults.flatMap(r => r.learnings),
+              ],
+              visitedUrls: [
+                ...newUrls,
+                ...followUpResults.flatMap(r => 
+                  compact(r.data.map(item => item.url))
+                ),
+              ],
+            });
+          } else {
+            results.push({
+              learnings: processedResults.learnings,
+              visitedUrls: newUrls,
+            });
+          }
+
         } catch (error) {
           console.error(`Error processing query "${query}":`, error);
           // Continue with next query even if this one fails
@@ -386,9 +428,9 @@ export async function deepResearch({
       }
 
       // Update progress after each section
-      currentProgress = ((i + 1) / totalSections) * 100;
+      const completedProgress = ((i + 1) / totalSections) * 100;
       onProgress?.(
-        currentProgress,
+        completedProgress,
         `Completed section: ${section.heading}`
       );
     }

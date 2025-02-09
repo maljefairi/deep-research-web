@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 const REPORTS_DIR = path.join(process.cwd(), 'final_reports');
 
+// Keep track of active research sessions
+const activeResearchSessions = new Map<string, boolean>();
+
 // Ensure reports directory exists with proper permissions
 fs.mkdir(REPORTS_DIR, { recursive: true, mode: 0o755 }).catch(console.error);
 
@@ -20,6 +23,19 @@ export async function GET(request: NextRequest) {
     return new Response('Missing parameters', { status: 400 });
   }
 
+  // Generate a unique session ID based on the query parameters
+  const sessionId = Buffer.from(JSON.stringify({
+    query,
+    breadth,
+    depth,
+    answers
+  })).toString('base64');
+
+  // Check if this research is already running
+  if (activeResearchSessions.get(sessionId)) {
+    return new Response('Research already in progress', { status: 409 });
+  }
+
   // Set up Server-Sent Events
   const encoder = new TextEncoder();
   const stream = new TransformStream();
@@ -30,6 +46,9 @@ export async function GET(request: NextRequest) {
       encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
     );
   };
+
+  // Mark this session as active
+  activeResearchSessions.set(sessionId, true);
 
   // Start research process
   (async () => {
@@ -205,6 +224,8 @@ export async function GET(request: NextRequest) {
         throw new Error('Failed to save report');
       }
 
+      // Clean up session when done
+      activeResearchSessions.delete(sessionId);
       await writer.close();
     } catch (error) {
       console.error('Research stream error:', error);
@@ -214,6 +235,8 @@ export async function GET(request: NextRequest) {
         progress: 0,
         logs: ['Error occurred during research: ' + (error instanceof Error ? error.message : 'Unknown error')],
       });
+      // Clean up session on error
+      activeResearchSessions.delete(sessionId);
       await writer.close();
     }
   })();
@@ -221,7 +244,7 @@ export async function GET(request: NextRequest) {
   return new Response(stream.readable, {
     headers: {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
     },
   });

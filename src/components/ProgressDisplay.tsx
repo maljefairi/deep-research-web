@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 
 interface ProgressDisplayProps {
   currentStep: string;
@@ -8,7 +9,11 @@ interface ProgressDisplayProps {
   error?: string;
   learnings?: string[];
   visitedUrls?: string[];
-  logs?: string[];
+  logs?: { id: string; message: string }[];
+}
+
+function formatProgress(progress: number): string {
+  return Math.round(progress).toString();
 }
 
 export default function ProgressDisplay({
@@ -26,11 +31,29 @@ export default function ProgressDisplay({
           {/* Progress Bar */}
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Research Progress
-              </h2>
+              <Link 
+                href="/"
+                className="group flex items-center space-x-2 cursor-pointer"
+              >
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  Research Assistant
+                </h2>
+                <svg 
+                  className="h-5 w-5 text-gray-400 group-hover:text-indigo-500 transition-colors" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" 
+                  />
+                </svg>
+              </Link>
               <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                {progress}%
+                {formatProgress(progress)}%
               </span>
             </div>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
@@ -45,36 +68,42 @@ export default function ProgressDisplay({
           <div className="mb-6 font-mono text-sm">
             <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
               <div className="space-y-2 text-gray-300">
-                {logs.map((log, index) => {
+                {logs.map((log) => {
+                  const message = log.message.includes('%') 
+                    ? log.message.replace(/\((\d+\.?\d*)%\)/g, (match, percent) => 
+                        `(${formatProgress(parseFloat(percent))}%)`
+                      )
+                    : log.message;
+
                   // Format different types of logs
-                  if (log.startsWith('Error:')) {
+                  if (message.startsWith('Error:')) {
                     return (
-                      <div key={index} className="text-red-400">
-                        <span className="text-red-500">!</span> {log}
+                      <div key={log.id} className="text-red-400">
+                        <span className="text-red-500">!</span> {message}
                       </div>
                     );
                   }
                   
-                  if (log.startsWith('Found') || log.startsWith('Analyzed')) {
+                  if (message.startsWith('Found') || message.startsWith('Analyzed')) {
                     return (
-                      <div key={index} className="text-green-400">
-                        <span className="text-green-500">✓</span> {log}
+                      <div key={log.id} className="text-green-400">
+                        <span className="text-green-500">✓</span> {message}
                       </div>
                     );
                   }
 
-                  if (log.startsWith('-')) {
+                  if (message.startsWith('-')) {
                     return (
-                      <div key={index} className="pl-4 text-gray-400">
-                        {log}
+                      <div key={log.id} className="pl-4 text-gray-400">
+                        {message}
                       </div>
                     );
                   }
 
                   return (
-                    <div key={index} className="whitespace-pre-wrap">
-                      <span className="text-blue-400">$</span> {log}
-                      {index === logs.length - 1 && progress < 100 && (
+                    <div key={log.id} className="whitespace-pre-wrap">
+                      <span className="text-blue-400">$</span> {message}
+                      {logs.indexOf(log) === logs.length - 1 && progress < 100 && (
                         <span className="animate-pulse">...</span>
                       )}
                     </div>
